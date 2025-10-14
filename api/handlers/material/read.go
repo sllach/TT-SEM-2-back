@@ -50,3 +50,47 @@ func GetMaterial(c *gin.Context) {
 
 	c.JSON(http.StatusOK, material)
 }
+
+// Estructura resumida para la respuesta
+type SummaryMaterial struct {
+	ID                   uuid.UUID          `json:"id"`
+	Nombre               string             `json:"nombre"`
+	Descripcion          string             `json:"descripcion"`
+	Composicion          models.StringArray `json:"composicion"`
+	DerivadoDe           uuid.UUID          `json:"derivado_de"`
+	PrimeraImagenGaleria string             `json:"primera_imagen_galeria,omitempty"`
+}
+
+// GetMaterialsSummary lista los materiales con información resumida
+func GetMaterialsSummary(c *gin.Context) {
+	db, err := database.OpenGormDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
+		return
+	}
+
+	var materials []models.Material
+	if err := db.Preload("Galeria").Find(&materials).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error listando materiales resumidos: " + err.Error()})
+		return
+	}
+
+	var summaries []SummaryMaterial
+	for _, m := range materials {
+		primeraImagen := ""
+		if len(m.Galeria) > 0 {
+			primeraImagen = m.Galeria[0].URLImagen
+		}
+
+		summaries = append(summaries, SummaryMaterial{
+			ID:                   m.ID,
+			Nombre:               m.Nombre,
+			Descripcion:          m.Descripcion,
+			Composicion:          m.Composicion,
+			DerivadoDe:           m.DerivadoDe,
+			PrimeraImagenGaleria: primeraImagen,
+		})
+	}
+
+	c.JSON(http.StatusOK, summaries)
+}
