@@ -3,7 +3,9 @@ package material
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,7 +16,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// UpdateMaterial maneja la actualización de un material con form-data
+// UpdateMaterial maneja la actualización de un material
 func UpdateMaterial(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -29,8 +31,9 @@ func UpdateMaterial(c *gin.Context) {
 		return
 	}
 
+	// Verificar si el material existe y precargar relaciones necesarias
 	var material models.Material
-	if err := db.First(&material, "id = ?", id).Error; err != nil {
+	if err := db.Preload("Pasos").Preload("Galeria").First(&material, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Material no encontrado"})
 		return
 	}
@@ -41,50 +44,67 @@ func UpdateMaterial(c *gin.Context) {
 		return
 	}
 
-	// Actualizar campos si se envían
-	if nombre := c.PostForm("nombre"); nombre != "" {
+	// Extraer campos textuales
+	nombre := c.PostForm("nombre")
+	descripcion := c.PostForm("descripcion")
+	herramientasStr := c.PostForm("herramientas")
+	composicionStr := c.PostForm("composicion")
+	derivadoDeStr := c.PostForm("derivado_de")
+	creadorIDStr := c.PostForm("creador_id")
+	propMecanicasStr := c.PostForm("prop_mecanicas")
+	propPerceptivasStr := c.PostForm("prop_perceptivas")
+	propEmocionalesStr := c.PostForm("prop_emocionales")
+	colaboradoresStr := c.PostForm("colaboradores")
+	pasosStr := c.PostForm("pasos")
+	galeriaCaptionsStr := c.PostForm("galeria_captions")
+
+	// Actualizar campos
+	if nombre != "" {
 		material.Nombre = nombre
 	}
-
-	if descripcion := c.PostForm("descripcion"); descripcion != "" {
+	if descripcion != "" {
 		material.Descripcion = descripcion
 	}
-
-	if herramientasStr := c.PostForm("herramientas"); herramientasStr != "" {
+	if herramientasStr != "" {
 		var herramientas models.StringArray
-		if err := json.Unmarshal([]byte(herramientasStr), &herramientas); err == nil {
-			material.Herramientas = herramientas
+		if err := json.Unmarshal([]byte(herramientasStr), &herramientas); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "herramientas inválido (debe ser JSON array)"})
+			return
 		}
+		material.Herramientas = herramientas
 	}
-
-	if composicionStr := c.PostForm("composicion"); composicionStr != "" {
+	if composicionStr != "" {
 		var composicion models.StringArray
-		if err := json.Unmarshal([]byte(composicionStr), &composicion); err == nil {
-			material.Composicion = composicion
+		if err := json.Unmarshal([]byte(composicionStr), &composicion); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "composicion inválido (debe ser JSON array)"})
+			return
 		}
+		material.Composicion = composicion
 	}
-
-	if derivadoDeStr := c.PostForm("derivado_de"); derivadoDeStr != "" {
+	if derivadoDeStr != "" {
 		derivadoDe, err := uuid.Parse(derivadoDeStr)
-		if err == nil {
-			material.DerivadoDe = derivadoDe
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "derivado_de inválido (UUID)"})
+			return
 		}
+		material.DerivadoDe = derivadoDe
 	}
-
-	if creadorIDStr := c.PostForm("creador_id"); creadorIDStr != "" {
+	if creadorIDStr != "" {
 		creadorID, err := strconv.ParseUint(creadorIDStr, 10, 32)
-		if err == nil {
-			material.CreadorID = uint(creadorID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "creador_id inválido"})
+			return
 		}
+		material.CreadorID = uint(creadorID)
 	}
 
+	// Guardar cambios en el material principal
 	if err := db.Save(&material).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando material: " + err.Error()})
 		return
 	}
 
-	// Actualizar propiedades mecánicas si se envía (sobrescribe si existe)
-	propMecanicasStr := c.PostForm("prop_mecanicas")
+	// Propiedades mecánicas
 	if propMecanicasStr != "" {
 		var propMecanicas models.PropiedadesMecanicas
 		if err := json.Unmarshal([]byte(propMecanicasStr), &propMecanicas); err != nil {
@@ -92,37 +112,70 @@ func UpdateMaterial(c *gin.Context) {
 			return
 		}
 		propMecanicas.MaterialID = material.ID
-		db.Where("material_id = ?", material.ID).Delete(&models.PropiedadesMecanicas{}) // Elimina anterior si existe
-		if err := db.Create(&propMecanicas).Error; err != nil {
+		if err := db.Debug().Save(&propMecanicas).Error; err != nil { // Save hace UPSERT si PK existe
+			log.Printf("Error actualizando prop_mecanicas: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando propiedades mecánicas: " + err.Error()})
 			return
 		}
 	}
 
-	// Colaboradores: Reemplaza todos si se envían
-	colaboradoresStr := c.PostForm("colaboradores")
+	// Propiedades perceptivas
+	if propPerceptivasStr != "" {
+		var propPerceptivas models.PropiedadesPerceptivas
+		if err := json.Unmarshal([]byte(propPerceptivasStr), &propPerceptivas); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "prop_perceptivas inválido (JSON object)"})
+			return
+		}
+		propPerceptivas.MaterialID = material.ID
+		if err := db.Debug().Save(&propPerceptivas).Error; err != nil {
+			log.Printf("Error actualizando prop_perceptivas: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando propiedades perceptivas: " + err.Error()})
+			return
+		}
+	}
+
+	// Propiedades emocionales
+	if propEmocionalesStr != "" {
+		var propEmocionales models.PropiedadesEmocionales
+		if err := json.Unmarshal([]byte(propEmocionalesStr), &propEmocionales); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "prop_emocionales inválido (JSON object)"})
+			return
+		}
+		propEmocionales.MaterialID = material.ID
+		if err := db.Debug().Save(&propEmocionales).Error; err != nil {
+			log.Printf("Error actualizando prop_emocionales: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando propiedades emocionales: " + err.Error()})
+			return
+		}
+	}
+
+	// Colaboradores
 	if colaboradoresStr != "" {
+		if err := db.Where("material_id = ?", material.ID).Delete(&models.ColaboradorMaterial{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando colaboradores existentes: " + err.Error()})
+			return
+		}
+
 		var colaboradores []uint
 		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradores); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (JSON array)"})
 			return
 		}
-		db.Where("material_id = ?", material.ID).Delete(&models.ColaboradorMaterial{}) // Elimina anteriores
 		for _, userID := range colaboradores {
 			colaborador := models.ColaboradorMaterial{
 				MaterialID: material.ID,
 				UsuarioID:  userID,
 			}
-			if err := db.Create(&colaborador).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando colaborador: " + err.Error()})
+			if err := db.Debug().Create(&colaborador).Error; err != nil {
+				log.Printf("Error creando colaborador: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando colaborador: " + err.Error()})
 				return
 			}
 		}
 	}
 
-	// Parsear captions para galería (JSON array)
+	// Parsear captions para galería
 	var galeriaCaptions []string
-	galeriaCaptionsStr := c.PostForm("galeria_captions")
 	if galeriaCaptionsStr != "" {
 		if err := json.Unmarshal([]byte(galeriaCaptionsStr), &galeriaCaptions); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "galeria_captions inválido (JSON array)"})
@@ -130,83 +183,147 @@ func UpdateMaterial(c *gin.Context) {
 		}
 	}
 
-	// Agregar nuevas imágenes a galería (no elimina antiguas)
+	// Manejar galería
 	files := c.Request.MultipartForm.File["galeria_images[]"]
-	for i, fileHeader := range files {
-		safeFilename := strings.ReplaceAll(fileHeader.Filename, " ", "_")
-		filePath := fmt.Sprintf("materials/%s/%s", material.ID.String(), safeFilename)
-		url, err := database.SubirAStorageSupabase(fileHeader, "pasos-bucket", filePath)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error subiendo a Supabase: " + err.Error()})
+	if len(files) > 0 {
+		if err := db.Where("material_id = ?", material.ID).Delete(&models.GaleriaMaterial{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando galería existente: " + err.Error()})
 			return
 		}
 
-		caption := ""
-		if i < len(galeriaCaptions) {
-			caption = galeriaCaptions[i]
-		}
+		for i, fileHeader := range files {
+			safeFilename := strings.ReplaceAll(fileHeader.Filename, " ", "_")
+			filePath := fmt.Sprintf("materials/%s/%s", material.ID.String(), safeFilename)
 
-		galeria := models.GaleriaMaterial{
-			MaterialID: material.ID,
-			URLImagen:  url,
-			Caption:    caption,
+			url, err := database.SubirAStorageSupabase(fileHeader, "pasos-bucket", filePath)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error subiendo a Supabase: " + err.Error()})
+				return
+			}
+
+			caption := ""
+			if i < len(galeriaCaptions) {
+				caption = galeriaCaptions[i]
+			}
+
+			galeria := models.GaleriaMaterial{
+				MaterialID: material.ID,
+				URLImagen:  url,
+				Caption:    caption,
+			}
+			if err := db.Debug().Create(&galeria).Error; err != nil {
+				log.Printf("Error creando galeria: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando galería: " + err.Error()})
+				return
+			}
 		}
-		if err := db.Create(&galeria).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando galería: " + err.Error()})
+	} else if len(galeriaCaptions) > 0 {
+		sort.Slice(material.Galeria, func(i, j int) bool {
+			return material.Galeria[i].ID < material.Galeria[j].ID
+		})
+		if len(galeriaCaptions) != len(material.Galeria) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Número de captions no coincide con galería existente"})
 			return
+		}
+		for i, caption := range galeriaCaptions {
+			material.Galeria[i].Caption = caption
+			if err := db.Save(&material.Galeria[i]).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando caption de galería: " + err.Error()})
+				return
+			}
 		}
 	}
 
-	// Actualizar pasos
-	pasosStr := c.PostForm("pasos")
+	// Manejar pasos (actualizar si proporcionado, manteniendo multimedia si no se cambian)
 	if pasosStr != "" {
-		var pasos []struct {
+		var newPasos []struct {
 			OrdenPaso   int    `json:"orden_paso"`
 			Descripcion string `json:"descripcion"`
 		}
-		if err := json.Unmarshal([]byte(pasosStr), &pasos); err != nil {
+		if err := json.Unmarshal([]byte(pasosStr), &newPasos); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "pasos inválido (JSON array)"})
 			return
 		}
 
-		db.Where("material_id = ?", material.ID).Delete(&models.PasoMaterial{}) // Elimina anteriores
+		// Mapa de pasos existentes por orden_paso
+		existingPasos := make(map[int]models.PasoMaterial)
+		for _, p := range material.Pasos {
+			existingPasos[p.OrdenPaso] = p
+		}
 
-		for i, paso := range pasos {
-			pasoModel := models.PasoMaterial{
-				MaterialID:  material.ID,
-				OrdenPaso:   paso.OrdenPaso,
-				Descripcion: paso.Descripcion,
+		// Procesar cada nuevo paso (update o create)
+		for i, newPaso := range newPasos {
+			var pasoModel models.PasoMaterial
+			if exist, ok := existingPasos[newPaso.OrdenPaso]; ok {
+				pasoModel = exist
+				pasoModel.Descripcion = newPaso.Descripcion
+			} else {
+				pasoModel = models.PasoMaterial{
+					MaterialID:  material.ID,
+					OrdenPaso:   newPaso.OrdenPaso,
+					Descripcion: newPaso.Descripcion,
+				}
 			}
 
-			// Upload nueva imagen si se envía
+			// Upload imagen si proporcionada
 			fileKey := fmt.Sprintf("paso_images[%d]", i)
 			fileHeaders := c.Request.MultipartForm.File[fileKey]
 			if len(fileHeaders) > 0 {
 				fileHeader := fileHeaders[0]
 				safeFilename := strings.ReplaceAll(fileHeader.Filename, " ", "_")
-				filePath := fmt.Sprintf("materials/%s/pasos/%d/%s", material.ID.String(), i, safeFilename)
+				filePath := fmt.Sprintf("materials/%s/pasos/%d/%s", material.ID.String(), newPaso.OrdenPaso, safeFilename)
 				url, err := database.SubirAStorageSupabase(fileHeader, "pasos-bucket", filePath)
-				if err == nil {
-					pasoModel.URLImagen = url
+				if err != nil {
+					log.Printf("Error subiendo imagen paso %d: %v", i, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error subiendo imagen de paso: " + err.Error()})
+					return
 				}
+				pasoModel.URLImagen = url
 			}
 
-			// Upload nuevo video si se envía
+			// Upload video si proporcionado
 			videoKey := fmt.Sprintf("paso_videos[%d]", i)
 			videoHeaders := c.Request.MultipartForm.File[videoKey]
 			if len(videoHeaders) > 0 {
 				fileHeader := videoHeaders[0]
 				safeFilename := strings.ReplaceAll(fileHeader.Filename, " ", "_")
-				filePath := fmt.Sprintf("materials/%s/pasos/%d/%s", material.ID.String(), i, safeFilename)
+				filePath := fmt.Sprintf("materials/%s/pasos/%d/%s", material.ID.String(), newPaso.OrdenPaso, safeFilename)
 				url, err := database.SubirAStorageSupabase(fileHeader, "pasos-bucket", filePath)
-				if err == nil {
-					pasoModel.URLVideo = url
+				if err != nil {
+					log.Printf("Error subiendo video paso %d: %v", i, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error subiendo video de paso: " + err.Error()})
+					return
 				}
+				pasoModel.URLVideo = url
 			}
 
-			if err := db.Create(&pasoModel).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando paso: " + err.Error()})
-				return
+			// Guardar o crear
+			if pasoModel.ID == 0 {
+				if err := db.Debug().Create(&pasoModel).Error; err != nil {
+					log.Printf("Error creando paso %d: %v", i, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando paso: " + err.Error()})
+					return
+				}
+			} else {
+				if err := db.Debug().Save(&pasoModel).Error; err != nil {
+					log.Printf("Error actualizando paso %d: %v", i, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando paso: " + err.Error()})
+					return
+				}
+			}
+		}
+
+		// Eliminar pasos que no están en la nueva lista
+		newOrdens := make(map[int]bool)
+		for _, np := range newPasos {
+			newOrdens[np.OrdenPaso] = true
+		}
+		for orden, exist := range existingPasos {
+			if !newOrdens[orden] {
+				if err := db.Delete(&exist).Error; err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando paso obsoleto: " + err.Error()})
+					return
+				}
 			}
 		}
 	}

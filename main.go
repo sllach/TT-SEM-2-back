@@ -17,21 +17,21 @@ import (
 
 func main() {
 	/*	db, err := database.OpenGormDB()
-		if err != nil {
-			log.Fatalf("Error al conectarse a la Base de Datos: %v", err)
-		}*/
+			if err != nil {
+				log.Fatalf("Error al conectarse a la Base de Datos: %v", err)
+			}
 
-	/*db.AutoMigrate(
-		&models.Usuario{},
+		db.AutoMigrate(
+			&models.Usuario{},
 
-		&models.Material{},
-		&models.PropiedadesEmocionales{},
-		&models.PropiedadesMecanicas{},
-		&models.PropiedadesPerceptivas{},
-		&models.PasoMaterial{},
-		&models.GaleriaMaterial{},
-		&models.ColaboradorMaterial{},
-	)*/
+			&models.Material{},
+			&models.PropiedadesEmocionales{},
+			&models.PropiedadesMecanicas{},
+			&models.PropiedadesPerceptivas{},
+			&models.PasoMaterial{},
+			&models.GaleriaMaterial{},
+			&models.ColaboradorMaterial{},
+		)*/
 
 	fmt.Print(config.DBURL())
 
@@ -54,6 +54,7 @@ func main() {
 	//Leer
 	router.GET("/materials", material.GetMaterials)
 	router.GET("/materials/:id", material.GetMaterial)
+	router.GET("/materials-summary", material.GetMaterialsSummary)
 
 	//Actualizar
 	router.PUT("/materials/:id", material.UpdateMaterial)
