@@ -18,7 +18,6 @@ import (
 type SupabaseUser struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
-	// Agrega más campos si necesitas, como name, etc.
 }
 
 // RegisterUserFromGoogle registra o actualiza el usuario basado en Google profile
@@ -128,3 +127,4 @@ func RegisterUserFromGoogle(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Usuario registrado", "usuario": usuario})
 }
+
