@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"TT-SEM-2-BACK/api/database"
@@ -49,12 +48,6 @@ func CreateMaterial(c *gin.Context) {
 		return
 	}
 
-	creadorID, err := strconv.ParseUint(creadorIDStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "creador_id inválido"})
-		return
-	}
-
 	// Parsear arrays desde strings JSON
 	var herramientas models.StringArray
 	if herramientasStr != "" {
@@ -88,7 +81,7 @@ func CreateMaterial(c *gin.Context) {
 		Herramientas: herramientas,
 		Composicion:  composicion,
 		DerivadoDe:   derivadoDe,
-		CreadorID:    uint(creadorID),
+		CreadorID:    creadorIDStr,
 	}
 
 	if err := db.Create(&material).Error; err != nil {
@@ -143,7 +136,7 @@ func CreateMaterial(c *gin.Context) {
 
 	// Colaboradores
 	if colaboradoresStr != "" {
-		var colaboradores []uint
+		var colaboradores []string
 		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradores); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (JSON array)"})
 			return
