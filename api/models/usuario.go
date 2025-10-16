@@ -1,10 +1,18 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Usuario struct {
-	gorm.Model
-	GoogleID string `gorm:"unique;not null" json:"google_id"`
+	GoogleID string `gorm:"primaryKey;unique;not null" json:"google_id"`
 	Nombre   string `gorm:"not null" json:"nombre"`
 	Email    string `gorm:"unique;not null" json:"email"`
+	Rol      string `gorm:"default:'user'" json:"rol"`
+
+	CreatedAt time.Time      `json:"-"`
+	UpdatedAt time.Time      `json:"-"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }

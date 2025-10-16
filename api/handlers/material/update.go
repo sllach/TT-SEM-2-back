@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 
 	"TT-SEM-2-BACK/api/database"
@@ -90,12 +89,7 @@ func UpdateMaterial(c *gin.Context) {
 		material.DerivadoDe = derivadoDe
 	}
 	if creadorIDStr != "" {
-		creadorID, err := strconv.ParseUint(creadorIDStr, 10, 32)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "creador_id inválido"})
-			return
-		}
-		material.CreadorID = uint(creadorID)
+		material.CreadorID = creadorIDStr
 	}
 
 	// Guardar cambios en el material principal
@@ -156,7 +150,7 @@ func UpdateMaterial(c *gin.Context) {
 			return
 		}
 
-		var colaboradores []uint
+		var colaboradores []string
 		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradores); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (JSON array)"})
 			return

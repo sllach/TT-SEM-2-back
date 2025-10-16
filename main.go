@@ -3,12 +3,15 @@ package main
 import (
 	"TT-SEM-2-BACK/api/config"
 	"TT-SEM-2-BACK/api/handlers/material"
+	auth "TT-SEM-2-BACK/api/handlers/usuarios"
+
+	//"TT-SEM-2-BACK/api/middleware"
 
 	//	"TT-SEM-2-BACK/api/database"
 
 	//	"TT-SEM-2-BACK/api/models"
 	"fmt"
-	//	"log"
+	//"log"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -16,22 +19,21 @@ import (
 )
 
 func main() {
-	/*	db, err := database.OpenGormDB()
-			if err != nil {
-				log.Fatalf("Error al conectarse a la Base de Datos: %v", err)
-			}
+	/*db, err := database.OpenGormDB()
+	if err != nil {
+		log.Fatalf("Error al conectarse a la Base de Datos: %v", err)
+	}
 
-		db.AutoMigrate(
-			&models.Usuario{},
-
-			&models.Material{},
-			&models.PropiedadesEmocionales{},
-			&models.PropiedadesMecanicas{},
-			&models.PropiedadesPerceptivas{},
-			&models.PasoMaterial{},
-			&models.GaleriaMaterial{},
-			&models.ColaboradorMaterial{},
-		)*/
+	db.AutoMigrate(
+		&models.Usuario{},
+		&models.Material{},
+		&models.PropiedadesEmocionales{},
+		&models.PropiedadesMecanicas{},
+		&models.PropiedadesPerceptivas{},
+		&models.PasoMaterial{},
+		&models.GaleriaMaterial{},
+		&models.ColaboradorMaterial{},
+	)*/
 
 	fmt.Print(config.DBURL())
 
@@ -47,6 +49,8 @@ func main() {
 
 	router := gin.Default()
 	router.Use(cors.New(corsConfig))
+
+	router.POST("/auth/register", auth.RegisterUserFromGoogle)
 
 	//Crear
 	router.POST("/materials", material.CreateMaterial)
