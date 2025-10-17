@@ -127,4 +127,3 @@ func RegisterUserFromGoogle(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Usuario registrado", "usuario": usuario})
 }
-
