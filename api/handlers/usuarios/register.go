@@ -1,98 +1,80 @@
 package auth
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"TT-SEM-2-BACK/api/database"
 	"TT-SEM-2-BACK/api/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
 )
 
-// Estructura del user de Supabase
-type SupabaseUser struct {
-	ID    string `json:"id"`
+// Claims estructura para parsear el JWT de Supabase
+type Claims struct {
 	Email string `json:"email"`
+	jwt.RegisteredClaims
 }
 
-// RegisterUserFromGoogle registra o actualiza el usuario basado en Google profile
+// Registra o actualiza el usuario basado en Google profile
 func RegisterUserFromGoogle(c *gin.Context) {
-	supabaseURL := os.Getenv("SUPABASE_URL")
-	supabaseKey := os.Getenv("SUPABASE_ANON_KEY")
-
-	if supabaseURL == "" || supabaseKey == "" {
-		log.Println("Variables de Supabase no configuradas")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error interno"})
-		return
-	}
-
 	// Parsear request
 	type RegisterRequest struct {
-		AccessToken string `json:"access_token"`
-		GoogleID    string `json:"google_id"`
-		Nombre      string `json:"nombre"`
-		Email       string `json:"email"`
+		AccessToken string `json:"access_token" binding:"required"`
+		GoogleID    string `json:"google_id" binding:"required"`
+		Nombre      string `json:"nombre" binding:"required"`
+		Email       string `json:"email" binding:"required,email"`
 	}
 	var req RegisterRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("Error parseando/validando JSON: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Request inválido: " + err.Error()})
 		return
 	}
 
-	// Validar el access_token con Supabase API directamente
-	apiURL := fmt.Sprintf("%s/auth/v1/user", supabaseURL)
-	httpReq, err := http.NewRequest("GET", apiURL, nil)
+	// Obtener JWT secret
+	jwtSecret := os.Getenv("SUPABASE_JWT_SECRET")
+	if jwtSecret == "" {
+		log.Printf("SUPABASE_JWT_SECRET no configurado")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error interno: clave JWT no configurada"})
+		return
+	}
+
+	// Parsear y validar el JWT
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(req.AccessToken, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("método de firma inesperado: %v", token.Header["alg"])
+		}
+		return []byte(jwtSecret), nil
+	})
 	if err != nil {
-		log.Printf("Error creando request: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error interno"})
+		log.Printf("Token inválido: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido: " + err.Error()})
+		return
+	}
+	if !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token no válido (posiblemente expirado)"})
 		return
 	}
 
-	httpReq.Header.Set("Authorization", "Bearer "+req.AccessToken)
-	httpReq.Header.Set("apikey", supabaseKey)
+	// Log para debug
+	log.Printf("Email fetch de JWT: %s", claims.Email)
+	log.Printf("Email enviado en request: %s", req.Email)
 
-	client := &http.Client{}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		log.Printf("Error enviando request a Supabase: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error validando token"})
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Error en respuesta de Supabase: %d - %s", resp.StatusCode, string(body))
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
-		return
-	}
-
-	// Parsear la respuesta
-	var supabaseResp struct {
-		User SupabaseUser `json:"user"`
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error leyendo respuesta"})
-		return
-	}
-	if err := json.Unmarshal(body, &supabaseResp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parseando respuesta: " + err.Error()})
-		return
-	}
-
-	// Verificar que el user de Supabase coincida con la info enviada
-	if supabaseResp.User.Email != req.Email {
+	// Verificar que el email coincida
+	if !strings.EqualFold(claims.Email, req.Email) {
+		log.Printf("Mismatch: fetch %s vs req %s", claims.Email, req.Email)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Info de usuario no coincide"})
 		return
 	}
 
-	// Conectar a tu DB
+	// Conectar a la DB
 	db, err := database.OpenGormDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
@@ -102,28 +84,56 @@ func RegisterUserFromGoogle(c *gin.Context) {
 	// Buscar si el usuario ya existe por GoogleID
 	var usuario models.Usuario
 	if err := db.Where("google_id = ?", req.GoogleID).First(&usuario).Error; err == nil {
-		// Existe: Actualizar nombre/email si cambiaron (opcional)
-		usuario.Nombre = req.Nombre
-		usuario.Email = req.Email
-		if err := db.Save(&usuario).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando usuario"})
+		// Existe: Actualizar nombre/email si cambiaron
+		updated := false
+		if usuario.Nombre != req.Nombre {
+			usuario.Nombre = req.Nombre
+			updated = true
+		}
+		if usuario.Email != req.Email {
+			usuario.Email = req.Email
+			updated = true
+		}
+		if updated {
+			if err := db.Save(&usuario).Error; err != nil {
+				if strings.Contains(err.Error(), "unique constraint") {
+					c.JSON(http.StatusConflict, gin.H{"error": "Email ya registrado con otro usuario"})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando usuario: " + err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "Usuario actualizado exitosamente", "usuario": usuario})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"message": "Usuario actualizado", "usuario": usuario})
+		c.JSON(http.StatusOK, gin.H{"message": "Usuario ya registrado, sin cambios necesarios", "usuario": usuario})
+		return
+	} else if err != gorm.ErrRecordNotFound {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error buscando usuario: " + err.Error()})
 		return
 	}
 
-	// No existe: Crear nuevo
+	// Crear nuevo
 	usuario = models.Usuario{
 		GoogleID: req.GoogleID,
 		Nombre:   req.Nombre,
 		Email:    req.Email,
-		Rol:      "user", // Default
+		Rol:      "user",
 	}
 	if err := db.Create(&usuario).Error; err != nil {
+		if strings.Contains(err.Error(), "unique constraint") {
+			if strings.Contains(err.Error(), "google_id") {
+				c.JSON(http.StatusConflict, gin.H{"error": "Google ID ya registrado"})
+			} else if strings.Contains(err.Error(), "email") {
+				c.JSON(http.StatusConflict, gin.H{"error": "Email ya registrado"})
+			} else {
+				c.JSON(http.StatusConflict, gin.H{"error": "Registro duplicado"})
+			}
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando usuario: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Usuario registrado", "usuario": usuario})
+	c.JSON(http.StatusCreated, gin.H{"message": "Usuario registrado exitosamente", "usuario": usuario})
 }

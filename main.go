@@ -50,6 +50,7 @@ func main() {
 	router := gin.Default()
 	router.Use(cors.New(corsConfig))
 
+	//Creación de cuenta
 	router.POST("/auth/register", auth.RegisterUserFromGoogle)
 
 	//Crear
