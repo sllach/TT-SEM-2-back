@@ -16,6 +16,14 @@ import (
 
 // CreateMaterial maneja la creación de un material
 func CreateMaterial(c *gin.Context) {
+	// Obtener GoogleID
+	googleIDAny, exists := c.Get("google_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Datos de usuario incompletos"})
+		return
+	}
+	googleID := googleIDAny.(string)
+
 	db, err := database.OpenGormDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
@@ -34,7 +42,6 @@ func CreateMaterial(c *gin.Context) {
 	herramientasStr := c.PostForm("herramientas")
 	composicionStr := c.PostForm("composicion")
 	derivadoDeStr := c.PostForm("derivado_de")
-	creadorIDStr := c.PostForm("creador_id")
 	propMecanicasStr := c.PostForm("prop_mecanicas")
 	propPerceptivasStr := c.PostForm("prop_perceptivas")
 	propEmocionalesStr := c.PostForm("prop_emocionales")
@@ -43,8 +50,8 @@ func CreateMaterial(c *gin.Context) {
 	galeriaCaptionsStr := c.PostForm("galeria_captions")
 
 	// Validaciones básicas
-	if nombre == "" || creadorIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Campos requeridos: nombre y creador_id"})
+	if nombre == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "El campo 'nombre' es requerido"})
 		return
 	}
 
@@ -56,6 +63,7 @@ func CreateMaterial(c *gin.Context) {
 			return
 		}
 	}
+
 	var composicion models.StringArray
 	if composicionStr != "" {
 		if err := json.Unmarshal([]byte(composicionStr), &composicion); err != nil {
@@ -73,7 +81,7 @@ func CreateMaterial(c *gin.Context) {
 		}
 	}
 
-	// Crear el material
+	// Crear el material usando el GoogleID del usuario autenticado
 	material := models.Material{
 		ID:           uuid.New(),
 		Nombre:       nombre,
@@ -81,7 +89,7 @@ func CreateMaterial(c *gin.Context) {
 		Herramientas: herramientas,
 		Composicion:  composicion,
 		DerivadoDe:   derivadoDe,
-		CreadorID:    creadorIDStr,
+		CreadorID:    googleID,
 	}
 
 	if err := db.Create(&material).Error; err != nil {
@@ -141,10 +149,10 @@ func CreateMaterial(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (JSON array)"})
 			return
 		}
-		for _, userID := range colaboradores {
+		for _, userIDStr := range colaboradores {
 			colaborador := models.ColaboradorMaterial{
 				MaterialID: material.ID,
-				UsuarioID:  userID,
+				UsuarioID:  userIDStr,
 			}
 			if err := db.Debug().Create(&colaborador).Error; err != nil {
 				log.Printf("Error creando colaborador: %v", err)

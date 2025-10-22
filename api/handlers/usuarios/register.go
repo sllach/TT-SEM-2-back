@@ -21,7 +21,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// Registra o actualiza el usuario basado en Google profile
+// RegisterUserFromGoogle registra o actualiza el usuario basado en Google profile
 func RegisterUserFromGoogle(c *gin.Context) {
 	// Parsear request
 	type RegisterRequest struct {
@@ -53,38 +53,30 @@ func RegisterUserFromGoogle(c *gin.Context) {
 		}
 		return []byte(jwtSecret), nil
 	})
-	if err != nil {
+	if err != nil || !token.Valid {
 		log.Printf("Token inválido: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido: " + err.Error()})
 		return
 	}
-	if !token.Valid {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token no válido (posiblemente expirado)"})
-		return
-	}
 
-	// Log para debug
-	log.Printf("Email fetch de JWT: %s", claims.Email)
-	log.Printf("Email enviado en request: %s", req.Email)
-
-	// Verificar que el email coincida
+	// Verificar email coincide
 	if !strings.EqualFold(claims.Email, req.Email) {
 		log.Printf("Mismatch: fetch %s vs req %s", claims.Email, req.Email)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Info de usuario no coincide"})
 		return
 	}
 
-	// Conectar a la DB
+	// Conectar a DB
 	db, err := database.OpenGormDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
 		return
 	}
 
-	// Buscar si el usuario ya existe por GoogleID
+	// Buscar por GoogleID
 	var usuario models.Usuario
 	if err := db.Where("google_id = ?", req.GoogleID).First(&usuario).Error; err == nil {
-		// Existe: Actualizar nombre/email si cambiaron
+		// Existe: Actualizar
 		updated := false
 		if usuario.Nombre != req.Nombre {
 			usuario.Nombre = req.Nombre
@@ -94,10 +86,14 @@ func RegisterUserFromGoogle(c *gin.Context) {
 			usuario.Email = req.Email
 			updated = true
 		}
+		if usuario.SupabaseID != claims.Subject {
+			usuario.SupabaseID = claims.Subject
+			updated = true
+		}
 		if updated {
 			if err := db.Save(&usuario).Error; err != nil {
 				if strings.Contains(err.Error(), "unique constraint") {
-					c.JSON(http.StatusConflict, gin.H{"error": "Email ya registrado con otro usuario"})
+					c.JSON(http.StatusConflict, gin.H{"error": "Registro duplicado (email o ID)"})
 					return
 				}
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando usuario: " + err.Error()})
@@ -115,20 +111,15 @@ func RegisterUserFromGoogle(c *gin.Context) {
 
 	// Crear nuevo
 	usuario = models.Usuario{
-		GoogleID: req.GoogleID,
-		Nombre:   req.Nombre,
-		Email:    req.Email,
-		Rol:      "user",
+		SupabaseID: claims.Subject,
+		GoogleID:   req.GoogleID,
+		Nombre:     req.Nombre,
+		Email:      req.Email,
+		Rol:        "lector",
 	}
 	if err := db.Create(&usuario).Error; err != nil {
 		if strings.Contains(err.Error(), "unique constraint") {
-			if strings.Contains(err.Error(), "google_id") {
-				c.JSON(http.StatusConflict, gin.H{"error": "Google ID ya registrado"})
-			} else if strings.Contains(err.Error(), "email") {
-				c.JSON(http.StatusConflict, gin.H{"error": "Email ya registrado"})
-			} else {
-				c.JSON(http.StatusConflict, gin.H{"error": "Registro duplicado"})
-			}
+			c.JSON(http.StatusConflict, gin.H{"error": "Registro duplicado (email o ID)"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando usuario: " + err.Error()})

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"TT-SEM-2-BACK/api/database"
+	"TT-SEM-2-BACK/api/middleware"
 	"TT-SEM-2-BACK/api/models"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +17,16 @@ import (
 )
 
 // UpdateMaterial maneja la actualización de un material
+// Los colaboradores solo pueden editar sus propios materiales
+// Los administradores pueden editar cualquier material
 func UpdateMaterial(c *gin.Context) {
+	// Obtener GoogleID del usuario autenticado
+	googleID, exists := middleware.GetUserGoogleID(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Datos de usuario incompletos"})
+		return
+	}
+
 	db, err := database.OpenGormDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
@@ -37,6 +47,20 @@ func UpdateMaterial(c *gin.Context) {
 		return
 	}
 
+	// VERIFICACIÓN DE PERMISOS:
+	// - Si es administrador: puede editar cualquier material
+	// - Si es colaborador: solo puede editar sus propios materiales
+	isAdmin := middleware.IsAdmin(c)
+	isOwner := material.CreadorID == googleID
+
+	if !isAdmin && !isOwner {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":  "No tienes permiso para editar este material",
+			"detail": "Los colaboradores solo pueden editar sus propios materiales",
+		})
+		return
+	}
+
 	// Parsear form-data (max 32MB para uploads)
 	if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando form-data: " + err.Error()})
@@ -49,7 +73,6 @@ func UpdateMaterial(c *gin.Context) {
 	herramientasStr := c.PostForm("herramientas")
 	composicionStr := c.PostForm("composicion")
 	derivadoDeStr := c.PostForm("derivado_de")
-	creadorIDStr := c.PostForm("creador_id")
 	propMecanicasStr := c.PostForm("prop_mecanicas")
 	propPerceptivasStr := c.PostForm("prop_perceptivas")
 	propEmocionalesStr := c.PostForm("prop_emocionales")
@@ -88,9 +111,6 @@ func UpdateMaterial(c *gin.Context) {
 		}
 		material.DerivadoDe = derivadoDe
 	}
-	if creadorIDStr != "" {
-		material.CreadorID = creadorIDStr
-	}
 
 	// Guardar cambios en el material principal
 	if err := db.Save(&material).Error; err != nil {
@@ -106,7 +126,7 @@ func UpdateMaterial(c *gin.Context) {
 			return
 		}
 		propMecanicas.MaterialID = material.ID
-		if err := db.Debug().Save(&propMecanicas).Error; err != nil { // Save hace UPSERT si PK existe
+		if err := db.Debug().Save(&propMecanicas).Error; err != nil {
 			log.Printf("Error actualizando prop_mecanicas: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando propiedades mecánicas: " + err.Error()})
 			return
@@ -245,7 +265,7 @@ func UpdateMaterial(c *gin.Context) {
 			existingPasos[p.OrdenPaso] = p
 		}
 
-		// Procesar cada nuevo paso (update o create)
+		// Procesar cada nuevo paso
 		for i, newPaso := range newPasos {
 			var pasoModel models.PasoMaterial
 			if exist, ok := existingPasos[newPaso.OrdenPaso]; ok {
