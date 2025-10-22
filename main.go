@@ -54,7 +54,7 @@ func main() {
 	router.GET("/materials/:id", material.GetMaterial)
 	router.GET("/materials-summary", material.GetMaterialsSummary)
 
-	// ========== RUTAS PROTEGIDAS (requieren autenticación) ==========
+	// ========== RUTAS PROTEGIDAS ==========
 	protected := router.Group("/")
 	protected.Use(middleware.AuthMiddleware())
 	{
@@ -92,3 +92,4 @@ func main() {
 
 	router.Run(":8080")
 }
+
