@@ -7,10 +7,12 @@ import (
 )
 
 type Usuario struct {
-	GoogleID string `gorm:"primaryKey;unique;not null" json:"google_id"`
-	Nombre   string `gorm:"not null" json:"nombre"`
-	Email    string `gorm:"unique;not null" json:"email"`
-	Rol      string `gorm:"default:'Lector'" json:"rol"`
+	gorm.Model
+	SupabaseID string `gorm:"unique;not null" json:"supabase_id"`
+	GoogleID   string `gorm:"primaryKey;unique;not null" json:"google_id"`
+	Nombre     string `gorm:"not null" json:"nombre"`
+	Email      string `gorm:"unique;not null" json:"email"`
+	Rol        string `gorm:"default:'Lector'" json:"rol"`
 
 	CreatedAt time.Time      `json:"-"`
 	UpdatedAt time.Time      `json:"-"`
