@@ -32,32 +32,37 @@ func DeleteMaterial(c *gin.Context) {
 		return
 	}
 
-	// Eliminar relaciones dependientes con Unscoped para hard delete
-	if err := db.Where("material_id = ?", id).Unscoped().Delete(&models.ColaboradorMaterial{}).Error; err != nil {
+	// Eliminar asociaciones de colaboradores usando GORM
+	if err := db.Model(&material).Association("Colaboradores").Clear(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando colaboradores: " + err.Error()})
 		return
 	}
 
+	// Eliminar galería
 	if err := db.Where("material_id = ?", id).Unscoped().Delete(&models.GaleriaMaterial{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando galería: " + err.Error()})
 		return
 	}
 
+	// Eliminar pasos
 	if err := db.Where("material_id = ?", id).Unscoped().Delete(&models.PasoMaterial{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando pasos: " + err.Error()})
 		return
 	}
 
+	// Eliminar propiedades mecánicas
 	if err := db.Where("material_id = ?", id).Unscoped().Delete(&models.PropiedadesMecanicas{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando propiedades mecánicas: " + err.Error()})
 		return
 	}
 
+	// Eliminar propiedades perceptivas
 	if err := db.Where("material_id = ?", id).Unscoped().Delete(&models.PropiedadesPerceptivas{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando propiedades perceptivas: " + err.Error()})
 		return
 	}
 
+	// Eliminar propiedades emocionales
 	if err := db.Where("material_id = ?", id).Unscoped().Delete(&models.PropiedadesEmocionales{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando propiedades emocionales: " + err.Error()})
 		return

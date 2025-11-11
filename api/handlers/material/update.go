@@ -17,6 +17,8 @@ import (
 )
 
 // UpdateMaterial maneja la actualización de un material
+// Los colaboradores solo pueden editar sus propios materiales
+// Los administradores pueden editar cualquier material
 func UpdateMaterial(c *gin.Context) {
 	// Obtener GoogleID del usuario autenticado
 	googleID, exists := middleware.GetUserGoogleID(c)
@@ -46,6 +48,8 @@ func UpdateMaterial(c *gin.Context) {
 	}
 
 	// VERIFICACIÓN DE PERMISOS:
+	// - Si es administrador: puede editar cualquier material
+	// - Si es colaborador: solo puede editar sus propios materiales
 	isAdmin := middleware.IsAdmin(c)
 	isOwner := material.CreadorID == googleID
 
@@ -343,4 +347,3 @@ func UpdateMaterial(c *gin.Context) {
 
 	c.JSON(http.StatusOK, material)
 }
-

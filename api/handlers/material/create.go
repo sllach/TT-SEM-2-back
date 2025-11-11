@@ -16,7 +16,7 @@ import (
 
 // CreateMaterial maneja la creación de un material
 func CreateMaterial(c *gin.Context) {
-	// Obtener GoogleID
+	// Obtener GoogleID del usuario para usar como CreadorID
 	googleIDAny, exists := c.Get("google_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Datos de usuario incompletos"})
@@ -46,6 +46,10 @@ func CreateMaterial(c *gin.Context) {
 	propPerceptivasStr := c.PostForm("prop_perceptivas")
 	propEmocionalesStr := c.PostForm("prop_emocionales")
 	colaboradoresStr := c.PostForm("colaboradores")
+	// Compatibilidad con nombre alternativo
+	if colaboradoresStr == "" {
+		colaboradoresStr = c.PostForm("colaboradores_material")
+	}
 	pasosStr := c.PostForm("pasos")
 	galeriaCaptionsStr := c.PostForm("galeria_captions")
 
@@ -90,6 +94,7 @@ func CreateMaterial(c *gin.Context) {
 		Composicion:  composicion,
 		DerivadoDe:   derivadoDe,
 		CreadorID:    googleID,
+		Estado:       false,
 	}
 
 	if err := db.Create(&material).Error; err != nil {
@@ -142,23 +147,36 @@ func CreateMaterial(c *gin.Context) {
 		}
 	}
 
-	// Colaboradores
+	// Colaboradores - Usar relación many2many de GORM
 	if colaboradoresStr != "" {
-		var colaboradores []string
-		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradores); err != nil {
+		var colaboradoresIDs []string
+		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradoresIDs); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (JSON array)"})
 			return
 		}
-		for _, userIDStr := range colaboradores {
-			colaborador := models.ColaboradorMaterial{
-				MaterialID: material.ID,
-				UsuarioID:  userIDStr,
-			}
-			if err := db.Debug().Create(&colaborador).Error; err != nil {
-				log.Printf("Error creando colaborador: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando colaborador: " + err.Error()})
-				return
-			}
+
+		// Buscar los usuarios por GoogleID
+		var colaboradores []models.Usuario
+		if err := db.Where("google_id IN ?", colaboradoresIDs).Find(&colaboradores).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error buscando colaboradores: " + err.Error()})
+			return
+		}
+
+		// Verificar que se encontraron todos los colaboradores
+		if len(colaboradores) != len(colaboradoresIDs) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":       "Algunos colaboradores no fueron encontrados",
+				"solicitados": len(colaboradoresIDs),
+				"encontrados": len(colaboradores),
+			})
+			return
+		}
+
+		// Asociar colaboradores usando GORM
+		if err := db.Model(&material).Association("Colaboradores").Append(&colaboradores); err != nil {
+			log.Printf("Error asociando colaboradores: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error asociando colaboradores: " + err.Error()})
+			return
 		}
 	}
 
