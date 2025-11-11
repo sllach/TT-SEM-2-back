@@ -6,8 +6,11 @@ import (
 	"TT-SEM-2-BACK/api/handlers/material"
 	auth "TT-SEM-2-BACK/api/handlers/usuarios"
 	"TT-SEM-2-BACK/api/middleware"
+
+	//"TT-SEM-2-BACK/api/models"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -21,14 +24,13 @@ func main() {
 	}
 
 	db.AutoMigrate(
-	//&models.Usuario{},
-	//&models.Material{},
-	//&models.PropiedadesEmocionales{},
-	//&models.PropiedadesMecanicas{},
-	//&models.PropiedadesPerceptivas{},
-	//&models.PasoMaterial{},
-	//&models.GaleriaMaterial{},
-	//&models.ColaboradorMaterial{},
+	/*&models.Usuario{},
+	&models.Material{},
+	&models.PropiedadesEmocionales{},
+	&models.PropiedadesMecanicas{},
+	&models.PropiedadesPerceptivas{},
+	&models.PasoMaterial{},
+	&models.GaleriaMaterial{},*/
 	)
 
 	fmt.Print(config.DBURL())
@@ -74,22 +76,28 @@ func main() {
 		adminOnly.Use(middleware.RequireRole("administrador"))
 		{
 			// Leer
-			adminOnly.GET("/users", auth.GetUsuarios)           // Listar todos los usuarios
-			adminOnly.GET("/users/:google_id", auth.GetUsuario) // Obtener un usuario específico
+			adminOnly.GET("/users", auth.GetUsuarios)                            // Listar todos los usuarios
+			adminOnly.GET("/users/:google_id", auth.GetUsuario)                  // Obtener un usuario específico
+			adminOnly.GET("/materials/pending", material.GetMaterialsPendientes) // Listar materiales pendientes de aprobación
 
 			// Actualizar
-			adminOnly.PUT("/users/:google_id", auth.UpdateUsuario) //Actualizar Usuario
+			adminOnly.PUT("/users/:google_id", auth.UpdateUsuario)             //Actualizar Usuario
+			adminOnly.POST("/materials/:id/approve", material.ApproveMaterial) // Aprobar material
+			adminOnly.POST("/materials/:id/reject", material.ApproveMaterial)  // Rechazar material
 
 			// Eliminar
 			adminOnly.DELETE("/materials/:id", material.DeleteMaterial)        // Eliminar material
 			adminOnly.DELETE("/users/:google_id", auth.DeleteUsuario)          // Eliminar usuario (soft delete)
-			adminOnly.DELETE("/users/:google_id/hard", auth.HardDeleteUsuario) //Eliminar usuario (hard delete)
+			adminOnly.DELETE("/users/:google_id/hard", auth.HardDeleteUsuario) // Eliminar usuario (hard delete)
 
 		}
 	}
 
-	log.Println("Servidor iniciado en :8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
-	router.Run(":8080")
+	log.Printf("🌐 Escuchando en el puerto %s", port)
+	router.Run(":" + port)
 }
-

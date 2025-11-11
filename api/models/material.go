@@ -16,16 +16,17 @@ type Material struct {
 	Composicion  StringArray    `gorm:"type:jsonb;default:'[]'::jsonb" json:"composicion"`
 	DerivadoDe   uuid.UUID      `gorm:"type:uuid" json:"derivado_de"`
 	CreadorID    string         `gorm:"not null" json:"creador_id"`
-	CreatedAt    time.Time      `json:"-"`
-	UpdatedAt    time.Time      `json:"-"`
+	Estado       bool           `gorm:"default:false;not null" json:"estado"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Relaciones
-	Creador                Usuario                 `gorm:"foreignKey:CreadorID;references:GoogleID"`                                                                              // Referencia a GoogleID
-	Colaboradores          []Usuario               `gorm:"many2many:colaboradores_material;foreignKey:ID;joinForeignKey:MaterialID;references:GoogleID;joinReferences:UsuarioID"` // Corregido
-	Pasos                  []PasoMaterial          `gorm:"foreignKey:MaterialID"`
-	Galeria                []GaleriaMaterial       `gorm:"foreignKey:MaterialID"`
-	PropiedadesMecanicas   *PropiedadesMecanicas   `gorm:"foreignKey:MaterialID"`
-	PropiedadesPerceptivas *PropiedadesPerceptivas `gorm:"foreignKey:MaterialID"`
-	PropiedadesEmocionales *PropiedadesEmocionales `gorm:"foreignKey:MaterialID"`
+	Creador                Usuario                 `gorm:"foreignKey:CreadorID;references:GoogleID" json:"creador"`
+	Colaboradores          []Usuario               `gorm:"many2many:colaboradores_material;foreignKey:ID;joinForeignKey:MaterialID;references:GoogleID;joinReferences:UsuarioID" json:"colaboradores"`
+	Pasos                  []PasoMaterial          `gorm:"foreignKey:MaterialID" json:"pasos"`
+	Galeria                []GaleriaMaterial       `gorm:"foreignKey:MaterialID" json:"galeria"`
+	PropiedadesMecanicas   *PropiedadesMecanicas   `gorm:"foreignKey:MaterialID" json:"prop_mecanicas,omitempty"`
+	PropiedadesPerceptivas *PropiedadesPerceptivas `gorm:"foreignKey:MaterialID" json:"prop_perceptivas,omitempty"`
+	PropiedadesEmocionales *PropiedadesEmocionales `gorm:"foreignKey:MaterialID" json:"prop_emocionales,omitempty"`
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// GetMaterials lista todos los materiales con relaciones
+// GetMaterials lista SOLO materiales aprobados (público - estado=true)
 func GetMaterials(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -19,7 +19,15 @@ func GetMaterials(c *gin.Context) {
 	}
 
 	var materials []models.Material
-	if err := db.Preload("Creador").Preload("Colaboradores").Preload("Pasos").Preload("Galeria").Preload("PropiedadesMecanicas").Preload("PropiedadesPerceptivas").Preload("PropiedadesEmocionales").Find(&materials).Error; err != nil {
+	if err := db.Where("estado = ?", true).
+		Preload("Creador").
+		Preload("Colaboradores").
+		Preload("Pasos").
+		Preload("Galeria").
+		Preload("PropiedadesMecanicas").
+		Preload("PropiedadesPerceptivas").
+		Preload("PropiedadesEmocionales").
+		Find(&materials).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error listando materiales: " + err.Error()})
 		return
 	}
@@ -27,7 +35,7 @@ func GetMaterials(c *gin.Context) {
 	c.JSON(http.StatusOK, materials)
 }
 
-// GetMaterial obtiene un material por ID con relaciones
+// GetMaterial obtiene un material por ID SOLO si está aprobado (público - estado=true)
 func GetMaterial(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -43,8 +51,16 @@ func GetMaterial(c *gin.Context) {
 	}
 
 	var material models.Material
-	if err := db.Preload("Creador").Preload("Colaboradores").Preload("Pasos").Preload("Galeria").Preload("PropiedadesMecanicas").Preload("PropiedadesPerceptivas").Preload("PropiedadesEmocionales").First(&material, "id = ?", id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Material no encontrado"})
+	if err := db.Where("id = ? AND estado = ?", id, true).
+		Preload("Creador").
+		Preload("Colaboradores").
+		Preload("Pasos").
+		Preload("Galeria").
+		Preload("PropiedadesMecanicas").
+		Preload("PropiedadesPerceptivas").
+		Preload("PropiedadesEmocionales").
+		First(&material).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Material no encontrado o no está aprobado"})
 		return
 	}
 
@@ -58,11 +74,107 @@ type SummaryMaterial struct {
 	Descripcion          string             `json:"descripcion"`
 	Composicion          models.StringArray `json:"composicion"`
 	DerivadoDe           uuid.UUID          `json:"derivado_de"`
+	Estado               bool               `json:"estado"`
 	PrimeraImagenGaleria string             `json:"primera_imagen_galeria,omitempty"`
 }
 
-// GetMaterialsSummary lista los materiales con información resumida
+// GetMaterialsSummary lista resumen SOLO de materiales aprobados (público - estado=true)
 func GetMaterialsSummary(c *gin.Context) {
+	db, err := database.OpenGormDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
+		return
+	}
+
+	var materials []models.Material
+	if err := db.Where("estado = ?", true).
+		Preload("Galeria").
+		Find(&materials).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error listando materiales resumidos: " + err.Error()})
+		return
+	}
+
+	var summaries []SummaryMaterial
+	for _, m := range materials {
+		primeraImagen := ""
+		if len(m.Galeria) > 0 {
+			primeraImagen = m.Galeria[0].URLImagen
+		}
+
+		summaries = append(summaries, SummaryMaterial{
+			ID:                   m.ID,
+			Nombre:               m.Nombre,
+			Descripcion:          m.Descripcion,
+			Composicion:          m.Composicion,
+			DerivadoDe:           m.DerivadoDe,
+			Estado:               m.Estado,
+			PrimeraImagenGaleria: primeraImagen,
+		})
+	}
+
+	c.JSON(http.StatusOK, summaries)
+}
+
+// ========== ENDPOINTS PARA ADMINISTRADOR (ver todos los materiales) ==========
+
+// GetMaterialsAdmin lista TODOS los materiales (aprobados y pendientes) - Solo Admin
+func GetMaterialsAdmin(c *gin.Context) {
+	db, err := database.OpenGormDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
+		return
+	}
+
+	var materials []models.Material
+	if err := db.Preload("Creador").
+		Preload("Colaboradores").
+		Preload("Pasos").
+		Preload("Galeria").
+		Preload("PropiedadesMecanicas").
+		Preload("PropiedadesPerceptivas").
+		Preload("PropiedadesEmocionales").
+		Find(&materials).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error listando materiales: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, materials)
+}
+
+// GetMaterialAdmin obtiene un material por ID sin filtro de estado - Solo Admin
+func GetMaterialAdmin(c *gin.Context) {
+	db, err := database.OpenGormDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
+		return
+	}
+
+	var material models.Material
+	if err := db.Where("id = ?", id).
+		Preload("Creador").
+		Preload("Colaboradores").
+		Preload("Pasos").
+		Preload("Galeria").
+		Preload("PropiedadesMecanicas").
+		Preload("PropiedadesPerceptivas").
+		Preload("PropiedadesEmocionales").
+		First(&material).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Material no encontrado"})
+		return
+	}
+
+	c.JSON(http.StatusOK, material)
+}
+
+// GetMaterialsSummaryAdmin lista resumen de TODOS los materiales - Solo Admin
+func GetMaterialsSummaryAdmin(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
@@ -88,9 +200,36 @@ func GetMaterialsSummary(c *gin.Context) {
 			Descripcion:          m.Descripcion,
 			Composicion:          m.Composicion,
 			DerivadoDe:           m.DerivadoDe,
+			Estado:               m.Estado,
 			PrimeraImagenGaleria: primeraImagen,
 		})
 	}
 
 	c.JSON(http.StatusOK, summaries)
+}
+
+// GetMaterialsPendientes lista materiales pendientes de aprobación (estado=false) - Solo Admin
+func GetMaterialsPendientes(c *gin.Context) {
+	db, err := database.OpenGormDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
+		return
+	}
+
+	var materials []models.Material
+	if err := db.Where("estado = ?", false).
+		Preload("Creador").
+		Preload("Galeria").
+		Preload("PropiedadesMecanicas").
+		Preload("PropiedadesPerceptivas").
+		Preload("PropiedadesEmocionales").
+		Find(&materials).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error listando materiales pendientes: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total":      len(materials),
+		"materiales": materials,
+	})
 }
