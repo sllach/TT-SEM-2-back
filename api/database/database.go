@@ -12,43 +12,39 @@ import (
 )
 
 func OpenGormDB() (*gorm.DB, error) {
-	// Obtener connection string desde config
 	dsn := config.DBURL()
 
 	if dsn == "" {
-		return nil, fmt.Errorf("no se pudo generar la connection string - verifica las variables de entorno")
+		return nil, fmt.Errorf("no se pudo generar la connection string")
 	}
 
-	// Configurar GORM - DESACTIVAR PrepareStmt para serverless
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Error),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
-		PrepareStmt: false, // ← CAMBIAR A FALSE para Render
+		PrepareStmt: true, // Session pooler SÍ soporta prepared statements
 	})
 
 	if err != nil {
 		return nil, fmt.Errorf("error conectando a la base de datos: %w", err)
 	}
 
-	// Configurar pool de conexiones
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, fmt.Errorf("error obteniendo sqlDB: %w", err)
 	}
 
-	// Configuraciones optimizadas para serverless
-	sqlDB.SetMaxIdleConns(1)                  // ← Reducir a 1
-	sqlDB.SetMaxOpenConns(5)                  // ← Reducir a 5
-	sqlDB.SetConnMaxLifetime(5 * time.Minute) // ← Reducir a 5 minutos
-	sqlDB.SetConnMaxIdleTime(2 * time.Minute) // ← Reducir a 2 minutos
+	// Configuración para session pooler
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetMaxOpenConns(20)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
 
-	// Verificar conexión
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("error haciendo ping a la DB: %w", err)
 	}
 
-	log.Println("✅ Conectado a la base de datos exitosamente")
+	log.Println("✅ Conectado a la base de datos (session pooler)")
 	return db, nil
 }

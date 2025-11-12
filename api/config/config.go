@@ -30,7 +30,6 @@ func DBURL() string {
 	DBPort := strings.TrimSpace(os.Getenv("DB_PORT"))
 	DBName := strings.TrimSpace(os.Getenv("DB_NAME"))
 
-	// Validar que todas las variables existan
 	if DBUser == "" || DBPassword == "" || DBHost == "" || DBPort == "" || DBName == "" {
 		log.Printf("❌ ERROR: Variables de entorno incompletas")
 		log.Printf("   DB_USER: '%s'", DBUser)
@@ -40,19 +39,18 @@ func DBURL() string {
 		return ""
 	}
 
-	// SSL mode
 	sslMode := "require"
 	if os.Getenv("RENDER") == "" && os.Getenv("LOCAL_DEV") == "true" {
 		sslMode = "disable"
 	}
 
-	// USAR SIMPLE MODE - No prepared statements en absoluto
+	// Session Pooler connection string
 	connectionString := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s&statement_cache_mode=simple&prefer_simple_protocol=true",
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		DBUser, DBPassword, DBHost, DBPort, DBName, sslMode,
 	)
 
-	log.Printf("🔗 Connection string generado (host: %s, port: %s, ssl: %s, cache: simple)", DBHost, DBPort, sslMode)
+	log.Printf("🔗 Session Pooler: host=%s port=%s ssl=%s", DBHost, DBPort, sslMode)
 	return connectionString
 }
 
