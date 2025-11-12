@@ -1,9 +1,9 @@
 package database
 
 import (
+	"TT-SEM-2-BACK/api/config"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -12,25 +12,20 @@ import (
 )
 
 func OpenGormDB() (*gorm.DB, error) {
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbname := os.Getenv("DB_NAME")
+	// Obtener connection string desde config
+	dsn := config.DBURL()
 
-	// Usar sslmode=require para Supabase
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
-		host, port, user, password, dbname,
-	)
+	if dsn == "" {
+		return nil, fmt.Errorf("no se pudo generar la connection string - verifica las variables de entorno")
+	}
 
-	// Configuración con timeouts
+	// Configurar GORM - DESACTIVAR PrepareStmt para serverless
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
-		PrepareStmt: true,
+		PrepareStmt: false, // ← CAMBIAR A FALSE para Render
 	})
 
 	if err != nil {
@@ -40,16 +35,16 @@ func OpenGormDB() (*gorm.DB, error) {
 	// Configurar pool de conexiones
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error obteniendo sqlDB: %w", err)
 	}
 
-	// Configuraciones importantes para serverless
-	sqlDB.SetMaxIdleConns(2)                   // Pocas conexiones idle
-	sqlDB.SetMaxOpenConns(10)                  // Máximo de conexiones
-	sqlDB.SetConnMaxLifetime(time.Hour)        // Reconectar cada hora
-	sqlDB.SetConnMaxIdleTime(10 * time.Minute) // Cerrar idle después de 10min
+	// Configuraciones optimizadas para serverless
+	sqlDB.SetMaxIdleConns(1)                  // ← Reducir a 1
+	sqlDB.SetMaxOpenConns(5)                  // ← Reducir a 5
+	sqlDB.SetConnMaxLifetime(5 * time.Minute) // ← Reducir a 5 minutos
+	sqlDB.SetConnMaxIdleTime(2 * time.Minute) // ← Reducir a 2 minutos
 
-	// Ping para verificar conexión
+	// Verificar conexión
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("error haciendo ping a la DB: %w", err)
 	}
