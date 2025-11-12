@@ -13,15 +13,35 @@ import (
 	"os"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	db, err := database.OpenGormDB()
-	if err != nil {
-		log.Fatalf("Error al conectarse a la Base de Datos: %v", err)
+	var db *gorm.DB
+	var err error
+
+	// Intentar conectar hasta 5 veces
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		db, err = database.OpenGormDB()
+		if err == nil {
+			break
+		}
+
+		log.Printf("❌ Intento %d/%d falló: %v", i+1, maxRetries, err)
+		if i < maxRetries-1 {
+			time.Sleep(time.Second * time.Duration(i+1))
+		}
 	}
+
+	if err != nil {
+		log.Fatalf("Error al conectarse a la Base de Datos después de %d intentos: %v", maxRetries, err)
+	}
+
+	log.Println("✅ Base de datos conectada")
 
 	db.AutoMigrate(
 	/*&models.Usuario{},
