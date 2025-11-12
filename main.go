@@ -80,6 +80,9 @@ func main() {
 	protected := router.Group("/")
 	protected.Use(middleware.AuthMiddleware())
 	{
+
+		protected.GET("/me", auth.GetMe) // Listar Perfil del usuario juntos con sus materiales
+
 		// ========== RUTAS SOLO PARA ADMINISTRADOR Y COLABORADOR ==========
 		adminCollab := protected.Group("/")
 		adminCollab.Use(middleware.RequireRole("administrador", "colaborador"))

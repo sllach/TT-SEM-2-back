@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetUsuarios lista todos los usuarios
+// GetUsuarios lista todos los usuarios (solo admin)
 func GetUsuarios(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -27,7 +27,7 @@ func GetUsuarios(c *gin.Context) {
 	c.JSON(http.StatusOK, usuarios)
 }
 
-// GetUsuario obtiene un usuario por GoogleID
+// GetUsuario obtiene un usuario por GoogleID (solo admin)
 func GetUsuario(c *gin.Context) {
 	googleID := c.Param("google_id")
 
@@ -46,7 +46,8 @@ func GetUsuario(c *gin.Context) {
 	c.JSON(http.StatusOK, usuario)
 }
 
-// GetMe obtiene la información del usuario autenticado
+// GetMe obtiene la información del usuario autenticado CON sus materiales
+// Disponible para cualquier usuario autenticado
 func GetMe(c *gin.Context) {
 	googleID, exists := middleware.GetUserGoogleID(c)
 	if !exists {
@@ -60,16 +61,65 @@ func GetMe(c *gin.Context) {
 		return
 	}
 
+	// Obtener información del usuario
 	var usuario models.Usuario
 	if err := db.Where("google_id = ?", googleID).First(&usuario).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Usuario no encontrado"})
 		return
 	}
 
-	c.JSON(http.StatusOK, usuario)
+	// Obtener materiales creados por el usuario
+	var materialesCreados []models.Material
+	if err := db.Where("creador_id = ?", googleID).
+		Preload("Galeria").
+		Preload("Colaboradores").
+		Preload("Pasos").
+		Preload("PropiedadesMecanicas").
+		Preload("PropiedadesPerceptivas").
+		Preload("PropiedadesEmocionales").
+		Find(&materialesCreados).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo materiales creados: " + err.Error()})
+		return
+	}
+
+	// Obtener materiales donde es colaborador
+	var materialesColaboracion []models.Material
+	if err := db.Joins("JOIN colaboradores_material ON colaboradores_material.material_id = materials.id").
+		Where("colaboradores_material.usuario_id = ?", googleID).
+		Preload("Creador").
+		Preload("Galeria").
+		Preload("Colaboradores").
+		Preload("PropiedadesMecanicas").
+		Preload("PropiedadesPerceptivas").
+		Preload("PropiedadesEmocionales").
+		Find(&materialesColaboracion).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo colaboraciones: " + err.Error()})
+		return
+	}
+
+	// Contar materiales por estado
+	var materialesAprobados, materialesPendientes int64
+	db.Model(&models.Material{}).Where("creador_id = ? AND estado = ?", googleID, true).Count(&materialesAprobados)
+	db.Model(&models.Material{}).Where("creador_id = ? AND estado = ?", googleID, false).Count(&materialesPendientes)
+
+	c.JSON(http.StatusOK, gin.H{
+		"usuario": gin.H{
+			"nombre": usuario.Nombre,
+			"email":  usuario.Email,
+			"rol":    usuario.Rol,
+		},
+		"estadisticas": gin.H{
+			"materiales_creados":    len(materialesCreados),
+			"materiales_aprobados":  materialesAprobados,
+			"materiales_pendientes": materialesPendientes,
+			"colaboraciones":        len(materialesColaboracion),
+		},
+		"materiales_creados":     materialesCreados,
+		"materiales_colaborador": materialesColaboracion,
+	})
 }
 
-// GetUsuarioMateriales obtiene todos los materiales creados por un usuario
+// GetUsuarioMateriales obtiene todos los materiales creados por un usuario (solo admin)
 func GetUsuarioMateriales(c *gin.Context) {
 	googleID := c.Param("google_id")
 
@@ -90,6 +140,8 @@ func GetUsuarioMateriales(c *gin.Context) {
 	var materiales []models.Material
 	if err := db.Where("creador_id = ?", googleID).
 		Preload("Galeria").
+		Preload("Colaboradores").
+		Preload("Pasos").
 		Preload("PropiedadesMecanicas").
 		Preload("PropiedadesPerceptivas").
 		Preload("PropiedadesEmocionales").
