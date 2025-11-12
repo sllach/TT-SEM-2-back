@@ -41,14 +41,14 @@ func DBURL() string {
 	}
 
 	// IMPORTANTE: Para Render/Producción usar sslmode=require
-	// Para local puedes usar sslmode=disable si es una DB local
 	sslMode := "require"
 	if os.Getenv("RENDER") == "" && os.Getenv("LOCAL_DEV") == "true" {
 		sslMode = "disable"
 	}
 
+	// CRÍTICO: Agregar statement_cache_mode=describe para desactivar prepared statements
 	connectionString := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s&statement_cache_mode=describe",
 		DBUser, DBPassword, DBHost, DBPort, DBName, sslMode,
 	)
 
