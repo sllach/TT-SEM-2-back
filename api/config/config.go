@@ -40,19 +40,19 @@ func DBURL() string {
 		return ""
 	}
 
-	// IMPORTANTE: Para Render/Producción usar sslmode=require
+	// SSL mode
 	sslMode := "require"
 	if os.Getenv("RENDER") == "" && os.Getenv("LOCAL_DEV") == "true" {
 		sslMode = "disable"
 	}
 
-	// CRÍTICO: Agregar statement_cache_mode=describe para desactivar prepared statements
+	// USAR SIMPLE MODE - No prepared statements en absoluto
 	connectionString := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s&statement_cache_mode=describe",
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s&statement_cache_mode=simple&prefer_simple_protocol=true",
 		DBUser, DBPassword, DBHost, DBPort, DBName, sslMode,
 	)
 
-	log.Printf("🔗 Connection string generado (host: %s, port: %s, ssl: %s)", DBHost, DBPort, sslMode)
+	log.Printf("🔗 Connection string generado (host: %s, port: %s, ssl: %s, cache: simple)", DBHost, DBPort, sslMode)
 	return connectionString
 }
 
