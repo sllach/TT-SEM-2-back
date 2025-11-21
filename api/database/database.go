@@ -31,7 +31,7 @@ func GetDB() (*gorm.DB, error) {
 			return
 		}
 
-		// Configuración de GORM (Mantenemos tu config original)
+		// Configuración de GORM (Mantenemos la config original)
 		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 			Logger: logger.Default.LogMode(logger.Error),
 			NowFunc: func() time.Time {
@@ -51,7 +51,6 @@ func GetDB() (*gorm.DB, error) {
 			return
 		}
 
-		// Tu configuración de Pool (se mantiene igual)
 		sqlDB.SetMaxIdleConns(5)
 		sqlDB.SetMaxOpenConns(20)
 		sqlDB.SetConnMaxLifetime(30 * time.Minute)

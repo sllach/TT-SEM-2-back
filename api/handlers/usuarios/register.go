@@ -94,7 +94,6 @@ func RegisterUserFromGoogle(c *gin.Context) {
 			updated = true
 		}
 
-		// === AQUÍ ESTÁ LA MAGIA: AUTO-REPARACIÓN DEL PUENTE ===
 		// Si el usuario existía pero no tenía SupabaseID (o cambió), lo actualizamos.
 		if usuario.SupabaseID != supabaseUID {
 			log.Printf("🔧 Reparando SupabaseID para usuario %s: %s -> %s", usuario.Email, usuario.SupabaseID, supabaseUID)

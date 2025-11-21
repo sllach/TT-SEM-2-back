@@ -13,7 +13,7 @@ type Notificacion struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
-	// Relación con Usuario (Tu clave foránea es GoogleID que es string)
+	// Relación con Usuario (La clave foránea es GoogleID que es string)
 	UsuarioID string `gorm:"not null" json:"usuario_id"`
 
 	// Relación con Material (Puede ser null, por eso usamos puntero *)
