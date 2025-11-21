@@ -1,50 +1,75 @@
 package database
 
 import (
-	"TT-SEM-2-BACK/api/config"
 	"fmt"
 	"log"
+	"sync"
 	"time"
+
+	"TT-SEM-2-BACK/api/config"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-func OpenGormDB() (*gorm.DB, error) {
-	dsn := config.DBURL()
+// Variables globales para el Singleton
+var (
+	dbInstance *gorm.DB
+	dbOnce     sync.Once
+	dbErr      error
+)
 
-	if dsn == "" {
-		return nil, fmt.Errorf("no se pudo generar la connection string")
-	}
+// GetDB devuelve la instancia ÚNICA de la base de datos (Singleton).
+// Soluciona el error de "undefined" y el problema de conexiones múltiples.
+func GetDB() (*gorm.DB, error) {
+	dbOnce.Do(func() {
+		dsn := config.DBURL()
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Error),
-		NowFunc: func() time.Time {
-			return time.Now().UTC()
-		},
-		PrepareStmt: true, // Session pooler SÍ soporta prepared statements
+		if dsn == "" {
+			dbErr = fmt.Errorf("no se pudo generar la connection string")
+			return
+		}
+
+		// Configuración de GORM (Mantenemos tu config original)
+		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Error),
+			NowFunc: func() time.Time {
+				return time.Now().UTC()
+			},
+			PrepareStmt: true,
+		})
+
+		if err != nil {
+			dbErr = fmt.Errorf("error conectando a la base de datos: %w", err)
+			return
+		}
+
+		sqlDB, err := db.DB()
+		if err != nil {
+			dbErr = fmt.Errorf("error obteniendo sqlDB: %w", err)
+			return
+		}
+
+		// Tu configuración de Pool (se mantiene igual)
+		sqlDB.SetMaxIdleConns(5)
+		sqlDB.SetMaxOpenConns(20)
+		sqlDB.SetConnMaxLifetime(30 * time.Minute)
+		sqlDB.SetConnMaxIdleTime(10 * time.Minute)
+
+		if err := sqlDB.Ping(); err != nil {
+			dbErr = fmt.Errorf("error haciendo ping a la DB: %w", err)
+			return
+		}
+
+		log.Println("✅ Conexión a base de datos establecida (Singleton Pattern)")
+		dbInstance = db
 	})
 
-	if err != nil {
-		return nil, fmt.Errorf("error conectando a la base de datos: %w", err)
-	}
+	return dbInstance, dbErr
+}
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("error obteniendo sqlDB: %w", err)
-	}
-
-	// Configuración para session pooler
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetMaxOpenConns(20)
-	sqlDB.SetConnMaxLifetime(30 * time.Minute)
-	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
-
-	if err := sqlDB.Ping(); err != nil {
-		return nil, fmt.Errorf("error haciendo ping a la DB: %w", err)
-	}
-
-	log.Println("✅ Conectado a la base de datos (session pooler)")
-	return db, nil
+// OpenGormDB se mantiene por compatibilidad, pero ahora usa GetDB internamente.
+func OpenGormDB() (*gorm.DB, error) {
+	return GetDB()
 }
