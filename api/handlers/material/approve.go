@@ -12,6 +12,41 @@ import (
 	"github.com/google/uuid"
 )
 
+// Helper para enviar las notificaciones en segundo plano
+func SendNotification(usuarioId string, matId uuid.UUID, materialName string, tipo string) {
+	go func(uID string, mID uuid.UUID, mNombre string, t string) {
+		// abrimos una conexión independiente para no depender del contexto del request HTTP
+		asyncDB, err := database.OpenGormDB()
+		if err != nil {
+			log.Printf("⚠️ Error conectando DB para notificación: %v", err)
+			return
+		}
+		var titulo, mensaje string
+		if t == "aprobado" {
+			titulo = "¡Material Aprobado!"
+			mensaje = "Tu material '" + mNombre + "' ha sido aprobado y ya es público."
+		} else {
+			titulo = "Material Rechazado"
+			mensaje = "Tu material '" + mNombre + "' ha sido devuelto a borrador."
+		}
+
+		nuevaNotif := models.Notificacion{
+			UsuarioID:  uID,
+			MaterialID: &mID,
+			Titulo:     titulo,
+			Mensaje:    mensaje,
+			Tipo:       t,
+			Leido:      false,
+		}
+
+		if err := asyncDB.Create(&nuevaNotif).Error; err != nil {
+			log.Printf("⚠️ Error guardando notificación: %v", err)
+		} else {
+			log.Printf("🔔 Notificación enviada a %s (Tipo: %s)", uID, t)
+		}
+	}(usuarioId, matId, materialName, tipo)
+}
+
 // ApproveMaterial aprueba un material cambiando estado a true
 func ApproveMaterial(c *gin.Context) {
 	idStr := c.Param("id")
@@ -49,6 +84,9 @@ func ApproveMaterial(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error aprobando material: " + err.Error()})
 		return
 	}
+
+	// === NUEVO: Notificación Asíncrona ===
+	SendNotification(material.CreadorID, material.ID, material.Nombre, "aprobado")
 
 	// Log de la aprobación
 	adminGoogleID, _ := middleware.GetUserGoogleID(c)
@@ -98,6 +136,9 @@ func RejectMaterial(c *gin.Context) {
 		return
 	}
 
+	// === NUEVO: Notificación Asíncrona ===
+	SendNotification(material.CreadorID, material.ID, material.Nombre, "rechazado")
+
 	// Log del rechazo
 	adminGoogleID, _ := middleware.GetUserGoogleID(c)
 	log.Printf("❌ Material rechazado: %s (%s) por admin: %s", material.Nombre, material.ID, adminGoogleID)
@@ -139,6 +180,12 @@ func ToggleApprovalMaterial(c *gin.Context) {
 		return
 	}
 
+	// === NUEVO: Notificación Asíncrona ===
+	tipoNotificacion := "rechazado"
+	if nuevoEstado {
+		tipoNotificacion = "aprobado"
+	}
+	SendNotification(material.CreadorID, material.ID, material.Nombre, tipoNotificacion)
 	// Log del cambio
 	adminGoogleID, _ := middleware.GetUserGoogleID(c)
 	estadoTexto := "rechazado"

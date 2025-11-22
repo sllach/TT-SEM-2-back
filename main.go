@@ -50,7 +50,8 @@ func main() {
 	&models.PropiedadesMecanicas{},
 	&models.PropiedadesPerceptivas{},
 	&models.PasoMaterial{},
-	&models.GaleriaMaterial{},*/
+	&models.GaleriaMaterial{},
+	&models.Notificacion{},*/
 	)
 
 	fmt.Print(config.DBURL())
