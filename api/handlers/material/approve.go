@@ -36,6 +36,7 @@ func SendNotification(usuarioId string, matId uuid.UUID, materialName string, ti
 			Titulo:     titulo,
 			Mensaje:    mensaje,
 			Tipo:       t,
+			Link:       "/material/" + mID.String(),
 			Leido:      false,
 		}
 
