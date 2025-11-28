@@ -103,6 +103,7 @@ func main() {
 			adminOnly.GET("/users", auth.GetUsuarios)                            // Listar todos los usuarios
 			adminOnly.GET("/users/:google_id", auth.GetUsuario)                  // Obtener un usuario específico
 			adminOnly.GET("/materials/pending", material.GetMaterialsPendientes) // Listar materiales pendientes de aprobación
+			adminOnly.GET("/users/stats", auth.GetDashboardStats)                //Listar la cantidad de usuarios y  materiales
 
 			// Actualizar
 			adminOnly.PUT("/users/:google_id", auth.UpdateUsuario)             //Actualizar Usuario

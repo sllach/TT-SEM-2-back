@@ -13,7 +13,7 @@ import (
 )
 
 // Helper para enviar las notificaciones en segundo plano
-func SendNotification(usuarioId string, matId uuid.UUID, materialName string, tipo string) {
+func SendNotification(usuarioId string, matId uuid.UUID, materialName string, tipo string, mensajeExtra string) {
 	go func(uID string, mID uuid.UUID, mNombre string, t string) {
 		// abrimos una conexión independiente para no depender del contexto del request HTTP
 		asyncDB, err := database.OpenGormDB()
@@ -27,7 +27,11 @@ func SendNotification(usuarioId string, matId uuid.UUID, materialName string, ti
 			mensaje = "Tu material '" + mNombre + "' ha sido aprobado y ya es público."
 		} else {
 			titulo = "Material Rechazado"
-			mensaje = "Tu material '" + mNombre + "' ha sido devuelto a borrador."
+			mensaje = "Tu material '" + mNombre + "' ha sido rechazado."
+			// Si hay una razón específica, la agregamos
+			if mensajeExtra != "" {
+				mensaje += " Motivo: " + mensajeExtra
+			}
 		}
 
 		nuevaNotif := models.Notificacion{
@@ -87,7 +91,7 @@ func ApproveMaterial(c *gin.Context) {
 	}
 
 	// === NUEVO: Notificación Asíncrona ===
-	SendNotification(material.CreadorID, material.ID, material.Nombre, "aprobado")
+	SendNotification(material.CreadorID, material.ID, material.Nombre, "aprobado", "")
 
 	// Log de la aprobación
 	adminGoogleID, _ := middleware.GetUserGoogleID(c)
@@ -99,6 +103,11 @@ func ApproveMaterial(c *gin.Context) {
 	})
 }
 
+// Estructura para recibir la razón desde el frontend
+type RechazoRequest struct {
+	Razon string `json:"razon"`
+}
+
 // RejectMaterial rechaza/desaprueba un material cambiando estado a false
 func RejectMaterial(c *gin.Context) {
 	idStr := c.Param("id")
@@ -106,6 +115,14 @@ func RejectMaterial(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
 		return
+	}
+
+	// 1. Leer el cuerpo (Body) para ver si hay razón de rechazo
+	var req RechazoRequest
+	// Usamos ShouldBindJSON para que no falle si no envían nada (opcional)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Si el JSON está mal formado o no existe, simplemente seguimos sin razón
+		log.Println("No se envió razón de rechazo o JSON inválido")
 	}
 
 	db, err := database.OpenGormDB()
@@ -138,12 +155,11 @@ func RejectMaterial(c *gin.Context) {
 	}
 
 	// === NUEVO: Notificación Asíncrona ===
-	SendNotification(material.CreadorID, material.ID, material.Nombre, "rechazado")
+	SendNotification(material.CreadorID, material.ID, material.Nombre, "rechazado", req.Razon)
 
 	// Log del rechazo
 	adminGoogleID, _ := middleware.GetUserGoogleID(c)
-	log.Printf("❌ Material rechazado: %s (%s) por admin: %s", material.Nombre, material.ID, adminGoogleID)
-
+	log.Printf("❌ Material rechazado: %s (%s) por admin: %s. Razón: %s", material.Nombre, material.ID, adminGoogleID, req.Razon)
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "Material rechazado/desaprobado exitosamente",
 		"material": material,
@@ -186,7 +202,7 @@ func ToggleApprovalMaterial(c *gin.Context) {
 	if nuevoEstado {
 		tipoNotificacion = "aprobado"
 	}
-	SendNotification(material.CreadorID, material.ID, material.Nombre, tipoNotificacion)
+	SendNotification(material.CreadorID, material.ID, material.Nombre, tipoNotificacion, "")
 	// Log del cambio
 	adminGoogleID, _ := middleware.GetUserGoogleID(c)
 	estadoTexto := "rechazado"
