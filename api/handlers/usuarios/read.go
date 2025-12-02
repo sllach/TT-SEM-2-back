@@ -161,3 +161,59 @@ func GetUsuarioMateriales(c *gin.Context) {
 		"total":      len(materiales),
 	})
 }
+
+func GetPublicUserProfile(c *gin.Context) {
+	googleID := c.Param("google_id")
+
+	db, err := database.OpenGormDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
+		return
+	}
+
+	// Buscar usuario
+	var usuario models.Usuario
+	if err := db.Where("google_id = ?", googleID).First(&usuario).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Usuario no encontrado"})
+		return
+	}
+
+	// Obtener SOLO materiales APROBADOS creados por el usuario (públicos)
+	var materialesCreados []models.Material
+	if err := db.Where("creador_id = ? AND estado = ?", googleID, true).
+		Preload("Galeria").
+		Preload("Colaboradores").
+		Find(&materialesCreados).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo materiales creados: " + err.Error()})
+		return
+	}
+
+	// Obtener materiales APROBADOS donde es colaborador
+	var materialesColaboracion []models.Material
+	if err := db.Joins("JOIN colaboradores_material ON colaboradores_material.material_id = materials.id").
+		Where("colaboradores_material.usuario_id = ? AND materials.estado = ?", googleID, true).
+		Preload("Creador").
+		Preload("Galeria").
+		Preload("Colaboradores").
+		Find(&materialesColaboracion).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo colaboraciones: " + err.Error()})
+		return
+	}
+
+	// Construir respuesta con información pública solamente
+	c.JSON(http.StatusOK, gin.H{
+		"perfil": gin.H{
+			"google_id": usuario.GoogleID,
+			"nombre":    usuario.Nombre,
+			"rol":       usuario.Rol,
+			// NO incluimos: Email, SupabaseID, timestamps, ID interno
+		},
+		"estadisticas": gin.H{
+			"materiales_creados": len(materialesCreados),
+			"colaboraciones":     len(materialesColaboracion),
+			"total_materiales":   len(materialesCreados) + len(materialesColaboracion),
+		},
+		"materiales_creados":     materialesCreados,      // Materiales donde es el creador
+		"materiales_colaborador": materialesColaboracion, // Materiales donde es colaborador
+	})
+}
