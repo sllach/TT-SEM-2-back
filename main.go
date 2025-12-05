@@ -76,6 +76,7 @@ func main() {
 	router.GET("/materials", material.GetMaterials)
 	router.GET("/materials/:id", material.GetMaterial)
 	router.GET("/materials-summary", material.GetMaterialsSummary)
+	router.GET("/users/:google_id/public", auth.GetPublicUserProfile) // Perfil público de usuario
 
 	// ========== RUTAS PROTEGIDAS ==========
 	protected := router.Group("/")
