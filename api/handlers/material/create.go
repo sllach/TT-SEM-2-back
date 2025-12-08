@@ -24,7 +24,7 @@ func CreateMaterial(c *gin.Context) {
 	}
 	googleID := googleIDAny.(string)
 
-	db, err := database.OpenGormDB()
+	db, err := database.GetDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
 		return
@@ -277,7 +277,48 @@ func CreateMaterial(c *gin.Context) {
 	}
 
 	// Recargar material con relaciones
-	db.Preload("Colaboradores").Preload("Galeria").Preload("Pasos").Preload("PropiedadesMecanicas").Preload("PropiedadesPerceptivas").Preload("PropiedadesEmocionales").Find(&material)
+	db.Preload("Creador").Preload("Colaboradores").Preload("Galeria").Preload("Pasos").Preload("PropiedadesMecanicas").Preload("PropiedadesPerceptivas").Preload("PropiedadesEmocionales").Find(&material)
 
+	// AHORA PASAMOS EL NOMBRE EN LUGAR DEL ID
+	// Si por alguna razón Creador viene vacío, usamos CreadorID como fallback
+	nombreMostrar := material.Creador.Nombre
+	if nombreMostrar == "" {
+		nombreMostrar = material.CreadorID
+	}
+	notificarAdmins(material.ID, material.Nombre, material.CreadorID)
 	c.JSON(http.StatusCreated, material)
+}
+
+// notificarAdmins busca a todos los usuarios con rol 'administrador' y les crea una notificación
+func notificarAdmins(matID uuid.UUID, matNombre string, creadorID string) {
+	go func() {
+		// 1. Conectar a BD (Usando Singleton)
+		db, err := database.GetDB()
+		if err != nil {
+			return
+		}
+
+		// 2. Buscar todos los administradores
+		var admins []models.Usuario
+		// NOTA: Asegúrate que en la BD el rol sea 'administrador'
+		if err := db.Where("rol = ?", "administrador").Find(&admins).Error; err != nil {
+			log.Printf("⚠️ Error buscando admins: %v", err)
+			return
+		}
+
+		// 3. Crear notificación para cada uno
+		for _, admin := range admins {
+			notif := models.Notificacion{
+				UsuarioID:  admin.GoogleID,
+				MaterialID: &matID,
+				Titulo:     "Nuevo Material Pendiente",
+				Mensaje:    "El usuario " + creadorID + " ha subido '" + matNombre + "'. Requiere revisión.",
+				Tipo:       "info",   // Icono azul/info
+				Link:       "/admin", // Link al material para revisarlo
+				Leido:      false,
+			}
+			db.Create(&notif)
+		}
+		log.Printf("🔔 Notificación enviada a %d administradores.", len(admins))
+	}()
 }

@@ -73,11 +73,11 @@ func UpdateUsuario(c *gin.Context) {
 		// Guardar con la capitalización correcta
 		switch rolLower {
 		case "lector":
-			usuario.Rol = "Lector"
+			usuario.Rol = "lector"
 		case "colaborador":
-			usuario.Rol = "Colaborador"
+			usuario.Rol = "colaborador"
 		case "administrador":
-			usuario.Rol = "Administrador"
+			usuario.Rol = "administrador"
 		}
 	}
 

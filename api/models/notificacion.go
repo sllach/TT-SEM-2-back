@@ -23,6 +23,7 @@ type Notificacion struct {
 	Mensaje string `gorm:"not null" json:"mensaje"`
 	Leido   bool   `gorm:"default:false" json:"leido"`
 	Tipo    string `json:"tipo"` // Ej: 'aprobado', 'rechazo', 'info'
+	Link    string `json:"link"`
 }
 
 // Aseguramos que GORM use el nombre exacto de la tabla en Supabase
