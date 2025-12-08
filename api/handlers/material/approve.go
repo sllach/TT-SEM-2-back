@@ -139,13 +139,13 @@ func RejectMaterial(c *gin.Context) {
 	}
 
 	// Verificar si ya está rechazado
-	if !material.Estado {
+	/*if !material.Estado {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":    "El material ya está rechazado/pendiente",
 			"material": material,
 		})
 		return
-	}
+	}*/
 
 	// Rechazar/desaprobar el material
 	material.Estado = false

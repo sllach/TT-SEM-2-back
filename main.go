@@ -109,7 +109,7 @@ func main() {
 			// Actualizar
 			adminOnly.PUT("/users/:google_id", auth.UpdateUsuario)             //Actualizar Usuario
 			adminOnly.POST("/materials/:id/approve", material.ApproveMaterial) // Aprobar material
-			adminOnly.POST("/materials/:id/reject", material.ApproveMaterial)  // Rechazar material
+			adminOnly.POST("/materials/:id/reject", material.RejectMaterial)   // Rechazar material
 
 			// Eliminar
 			adminOnly.DELETE("/materials/:id", material.DeleteMaterial)        // Eliminar material

@@ -347,3 +347,37 @@ func UpdateMaterial(c *gin.Context) {
 
 	c.JSON(http.StatusOK, material)
 }
+
+// notificarAdmins busca a todos los usuarios con rol 'administrador' y les crea una notificación
+func notificarUpdate(matID uuid.UUID, matNombre string, creadorID string) {
+	go func() {
+		// 1. Conectar a BD (Usando Singleton)
+		db, err := database.GetDB()
+		if err != nil {
+			return
+		}
+
+		// 2. Buscar todos los administradores
+		var admins []models.Usuario
+		// NOTA: Asegúrate que en la BD el rol sea 'administrador'
+		if err := db.Where("rol = ?", "administrador").Find(&admins).Error; err != nil {
+			log.Printf("⚠️ Error buscando admins: %v", err)
+			return
+		}
+
+		// 3. Crear notificación para cada uno
+		for _, admin := range admins {
+			notif := models.Notificacion{
+				UsuarioID:  admin.GoogleID,
+				MaterialID: &matID,
+				Titulo:     "Material Actualizado Pendiente",
+				Mensaje:    "El usuario " + creadorID + " ha actualizado '" + matNombre + "'. Requiere revisión.",
+				Tipo:       "info",  // Icono azul/info
+				Link:       "/user", // Link al material para revisarlo
+				Leido:      false,
+			}
+			db.Create(&notif)
+		}
+		log.Printf("🔔 Notificación enviada a %d administradores.", len(admins))
+	}()
+}
