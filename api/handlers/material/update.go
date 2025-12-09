@@ -112,6 +112,9 @@ func UpdateMaterial(c *gin.Context) {
 		material.DerivadoDe = derivadoDe
 	}
 
+	// Resetear estado a false (pendiente) al editar
+	material.Estado = false
+
 	// Guardar cambios en el material principal
 	if err := db.Save(&material).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error actualizando material: " + err.Error()})
@@ -163,27 +166,39 @@ func UpdateMaterial(c *gin.Context) {
 		}
 	}
 
-	// Colaboradores
+	// Colaboradores por Email
 	if colaboradoresStr != "" {
+		// 1. Eliminar colaboradores existentes
 		if err := db.Where("material_id = ?", material.ID).Delete(&models.ColaboradorMaterial{}).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error eliminando colaboradores existentes: " + err.Error()})
 			return
 		}
 
-		var colaboradores []string
-		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradores); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (JSON array)"})
+		// 2. Parsear array de emails
+		var colaboradoresEmails []string
+		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradoresEmails); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (debe ser JSON array de emails)"})
 			return
 		}
-		for _, userID := range colaboradores {
-			colaborador := models.ColaboradorMaterial{
-				MaterialID: material.ID,
-				UsuarioID:  userID,
-			}
-			if err := db.Debug().Create(&colaborador).Error; err != nil {
-				log.Printf("Error creando colaborador: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando colaborador: " + err.Error()})
+
+		if len(colaboradoresEmails) > 0 {
+			// 3. Buscar usuarios por sus emails
+			var usuariosEncontrados []models.Usuario
+			if err := db.Where("email IN ?", colaboradoresEmails).Find(&usuariosEncontrados).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error buscando usuarios por email: " + err.Error()})
 				return
+			}
+
+			// 4. Crear las nuevas asociaciones
+			for _, usuario := range usuariosEncontrados {
+				colaborador := models.ColaboradorMaterial{
+					MaterialID: material.ID,
+					UsuarioID:  usuario.GoogleID, // Usamos el ID interno para la relación
+				}
+				if err := db.Debug().Create(&colaborador).Error; err != nil {
+					log.Printf("Error creando colaborador: %v", err)
+					// No retornamos error fatal aquí para permitir que se guarden los que sí funcionaron
+				}
 			}
 		}
 	}
@@ -345,10 +360,17 @@ func UpdateMaterial(c *gin.Context) {
 	// Recargar material con relaciones
 	db.Preload("Colaboradores").Preload("Galeria").Preload("Pasos").Preload("PropiedadesMecanicas").Preload("PropiedadesPerceptivas").Preload("PropiedadesEmocionales").Find(&material)
 
+	// Notificar que se actualizó (y ahora está pendiente)
+	nombreMostrar := material.Creador.Nombre
+	if nombreMostrar == "" {
+		nombreMostrar = material.CreadorID
+	}
+	notificarUpdate(material.ID, material.Nombre, nombreMostrar)
+
 	c.JSON(http.StatusOK, material)
 }
 
-// notificarAdmins busca a todos los usuarios con rol 'administrador' y les crea una notificación
+// notificarUpdate busca a todos los usuarios con rol 'administrador' y les crea una notificación
 func notificarUpdate(matID uuid.UUID, matNombre string, creadorID string) {
 	go func() {
 		// 1. Conectar a BD (Usando Singleton)
@@ -372,8 +394,8 @@ func notificarUpdate(matID uuid.UUID, matNombre string, creadorID string) {
 				MaterialID: &matID,
 				Titulo:     "Material Actualizado Pendiente",
 				Mensaje:    "El usuario " + creadorID + " ha actualizado '" + matNombre + "'. Requiere revisión.",
-				Tipo:       "info",  // Icono azul/info
-				Link:       "/user", // Link al material para revisarlo
+				Tipo:       "info",
+				Link:       "/admin",
 				Leido:      false,
 			}
 			db.Create(&notif)

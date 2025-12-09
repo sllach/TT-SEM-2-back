@@ -45,11 +45,13 @@ func CreateMaterial(c *gin.Context) {
 	propMecanicasStr := c.PostForm("prop_mecanicas")
 	propPerceptivasStr := c.PostForm("prop_perceptivas")
 	propEmocionalesStr := c.PostForm("prop_emocionales")
+
 	colaboradoresStr := c.PostForm("colaboradores")
 	// Compatibilidad con nombre alternativo
 	if colaboradoresStr == "" {
 		colaboradoresStr = c.PostForm("colaboradores_material")
 	}
+
 	pasosStr := c.PostForm("pasos")
 	galeriaCaptionsStr := c.PostForm("galeria_captions")
 
@@ -147,36 +149,40 @@ func CreateMaterial(c *gin.Context) {
 		}
 	}
 
-	// Colaboradores - Usar relación many2many de GORM
+	// Colaboradores por Email
 	if colaboradoresStr != "" {
-		var colaboradoresIDs []string
-		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradoresIDs); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (JSON array)"})
+		var colaboradoresEmails []string
+
+		// 1. Decodificar el JSON de correos
+		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradoresEmails); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (debe ser JSON array de emails)"})
 			return
 		}
 
-		// Buscar los usuarios por GoogleID
-		var colaboradores []models.Usuario
-		if err := db.Where("google_id IN ?", colaboradoresIDs).Find(&colaboradores).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error buscando colaboradores: " + err.Error()})
-			return
-		}
+		if len(colaboradoresEmails) > 0 {
+			// 2. Buscar los usuarios por Email en la BD
+			var colaboradores []models.Usuario
+			if err := db.Where("email IN ?", colaboradoresEmails).Find(&colaboradores).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error buscando colaboradores: " + err.Error()})
+				return
+			}
 
-		// Verificar que se encontraron todos los colaboradores
-		if len(colaboradores) != len(colaboradoresIDs) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":       "Algunos colaboradores no fueron encontrados",
-				"solicitados": len(colaboradoresIDs),
-				"encontrados": len(colaboradores),
-			})
-			return
-		}
+			// 3. Verificar que se encontraron todos los colaboradores
+			if len(colaboradores) != len(colaboradoresEmails) {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":       "Algunos colaboradores no fueron encontrados (verifique los correos)",
+					"solicitados": len(colaboradoresEmails),
+					"encontrados": len(colaboradores),
+				})
+				return
+			}
 
-		// Asociar colaboradores usando GORM
-		if err := db.Model(&material).Association("Colaboradores").Append(&colaboradores); err != nil {
-			log.Printf("Error asociando colaboradores: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error asociando colaboradores: " + err.Error()})
-			return
+			// 4. Asociar colaboradores usando GORM (Append usa los IDs internos automáticamente)
+			if err := db.Model(&material).Association("Colaboradores").Append(&colaboradores); err != nil {
+				log.Printf("Error asociando colaboradores: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error asociando colaboradores: " + err.Error()})
+				return
+			}
 		}
 	}
 
@@ -279,12 +285,6 @@ func CreateMaterial(c *gin.Context) {
 	// Recargar material con relaciones
 	db.Preload("Creador").Preload("Colaboradores").Preload("Galeria").Preload("Pasos").Preload("PropiedadesMecanicas").Preload("PropiedadesPerceptivas").Preload("PropiedadesEmocionales").Find(&material)
 
-	// AHORA PASAMOS EL NOMBRE EN LUGAR DEL ID
-	// Si por alguna razón Creador viene vacío, usamos CreadorID como fallback
-	nombreMostrar := material.Creador.Nombre
-	if nombreMostrar == "" {
-		nombreMostrar = material.CreadorID
-	}
 	notificarAdmins(material.ID, material.Nombre, material.CreadorID)
 	c.JSON(http.StatusCreated, material)
 }
@@ -300,7 +300,6 @@ func notificarAdmins(matID uuid.UUID, matNombre string, creadorID string) {
 
 		// 2. Buscar todos los administradores
 		var admins []models.Usuario
-		// NOTA: Asegúrate que en la BD el rol sea 'administrador'
 		if err := db.Where("rol = ?", "administrador").Find(&admins).Error; err != nil {
 			log.Printf("⚠️ Error buscando admins: %v", err)
 			return

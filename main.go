@@ -73,10 +73,12 @@ func main() {
 	router.POST("/auth/register", auth.RegisterUserFromGoogle)
 
 	// Leer
-	router.GET("/materials", material.GetMaterials)
-	router.GET("/materials/:id", material.GetMaterial)
-	router.GET("/materials-summary", material.GetMaterialsSummary)
-	router.GET("/users/:google_id/public", auth.GetPublicUserProfile) // Perfil público de usuario
+	router.GET("/materials", material.GetMaterials)                    // Obtener todos los materiales aprobados
+	router.GET("/materials/:id", material.GetMaterial)                 // Obtener material por ID
+	router.GET("/materials/:id/derived", material.GetDerivedMaterials) // Obtener materiales derivados
+	router.GET("/materials/filters", material.GetMaterialFilters)      // Obtener filtros dinámicos (herramientas/composición)
+	router.GET("/materials-summary", material.GetMaterialsSummary)     // Obtener los materiales resumidos
+	router.GET("/users/:google_id/public", auth.GetPublicUserProfile)  // Perfil público de usuario
 
 	// ========== RUTAS PROTEGIDAS ==========
 	protected := router.Group("/")
@@ -104,10 +106,10 @@ func main() {
 			adminOnly.GET("/users", auth.GetUsuarios)                            // Listar todos los usuarios
 			adminOnly.GET("/users/:google_id", auth.GetUsuario)                  // Obtener un usuario específico
 			adminOnly.GET("/materials/pending", material.GetMaterialsPendientes) // Listar materiales pendientes de aprobación
-			adminOnly.GET("/users/stats", auth.GetDashboardStats)                //Listar la cantidad de usuarios y  materiales
+			adminOnly.GET("/users/stats", auth.GetDashboardStats)                // Listar la cantidad de usuarios y materiales
 
 			// Actualizar
-			adminOnly.PUT("/users/:google_id", auth.UpdateUsuario)             //Actualizar Usuario
+			adminOnly.PUT("/users/:google_id", auth.UpdateUsuario)             // Actualizar Usuario
 			adminOnly.POST("/materials/:id/approve", material.ApproveMaterial) // Aprobar material
 			adminOnly.POST("/materials/:id/reject", material.RejectMaterial)   // Rechazar material
 

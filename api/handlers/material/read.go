@@ -1,6 +1,7 @@
 package material
 
 import (
+	"log"
 	"net/http"
 
 	"TT-SEM-2-BACK/api/database"
@@ -10,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// GetMaterials lista SOLO materiales aprobados (público - estado=true)
+// GetMaterials lista SOLO materiales aprobados
 func GetMaterials(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -35,7 +36,7 @@ func GetMaterials(c *gin.Context) {
 	c.JSON(http.StatusOK, materials)
 }
 
-// GetMaterial obtiene un material por ID SOLO si está aprobado (público - estado=true)
+// GetMaterial obtiene un material por ID SOLO si está aprobado
 func GetMaterial(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -78,7 +79,7 @@ type SummaryMaterial struct {
 	PrimeraImagenGaleria string             `json:"primera_imagen_galeria,omitempty"`
 }
 
-// GetMaterialsSummary lista resumen SOLO de materiales aprobados (público - estado=true)
+// GetMaterialsSummary lista resumen SOLO de materiales aprobados
 func GetMaterialsSummary(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -115,9 +116,7 @@ func GetMaterialsSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, summaries)
 }
 
-// ========== ENDPOINTS PARA ADMINISTRADOR (ver todos los materiales) ==========
-
-// GetMaterialsAdmin lista TODOS los materiales (aprobados y pendientes) - Solo Admin
+// GetMaterialsAdmin lista TODOS los materiales - Solo Admin
 func GetMaterialsAdmin(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -208,7 +207,7 @@ func GetMaterialsSummaryAdmin(c *gin.Context) {
 	c.JSON(http.StatusOK, summaries)
 }
 
-// GetMaterialsPendientes lista materiales pendientes de aprobación (estado=false) - Solo Admin
+// GetMaterialsPendientes lista materiales pendientes de aprobación - Solo Admin
 func GetMaterialsPendientes(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {
@@ -220,6 +219,7 @@ func GetMaterialsPendientes(c *gin.Context) {
 	if err := db.Where("estado = ?", false).
 		Preload("Creador").
 		Preload("Galeria").
+		Preload("Pasos").
 		Preload("PropiedadesMecanicas").
 		Preload("PropiedadesPerceptivas").
 		Preload("PropiedadesEmocionales").
@@ -231,5 +231,73 @@ func GetMaterialsPendientes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"total":      len(materials),
 		"materiales": materials,
+	})
+}
+
+// GetDerivedMaterials obtiene los materiales que se derivan de un ID específico (PUNTO 3)
+func GetDerivedMaterials(c *gin.Context) {
+	db, err := database.OpenGormDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
+		return
+	}
+
+	idStr := c.Param("id")
+	parentID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID padre inválido"})
+		return
+	}
+
+	// Buscamos materiales donde derivado_de == parentID
+	// Asumimos que solo mostramos los APROBADOS públicamente
+	var derivedMaterials []models.Material
+	if err := db.Where("derivado_de = ? AND estado = ?", parentID, true).
+		Preload("Creador").
+		Preload("Galeria").
+		Find(&derivedMaterials).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error buscando derivados: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, derivedMaterials)
+}
+
+// GetMaterialFilters obtiene listas únicas de herramientas y composiciones para filtros
+func GetMaterialFilters(c *gin.Context) {
+	db, err := database.OpenGormDB()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error conectando a la DB"})
+		return
+	}
+
+	var herramientas []string
+	var composiciones []string
+
+	// Obtener herramientas únicas y normalizadas
+	err = db.Raw(`
+		SELECT DISTINCT INITCAP(element)
+		FROM materials, jsonb_array_elements_text(herramientas) AS element
+		WHERE estado = true
+		ORDER BY 1 ASC
+	`).Scan(&herramientas).Error
+	if err != nil {
+		log.Printf("Error obteniendo filtros herramientas: %v", err)
+	}
+
+	// Obtener composiciones únicas y normalizadas
+	err = db.Raw(`
+		SELECT DISTINCT INITCAP(element)
+		FROM materials, jsonb_array_elements_text(composicion) AS element
+		WHERE estado = true
+		ORDER BY 1 ASC
+	`).Scan(&composiciones).Error
+	if err != nil {
+		log.Printf("Error obteniendo filtros composicion: %v", err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"herramientas": herramientas,
+		"composicion":  composiciones,
 	})
 }
