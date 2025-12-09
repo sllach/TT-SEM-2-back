@@ -90,7 +90,7 @@ func ApproveMaterial(c *gin.Context) {
 		return
 	}
 
-	// === NUEVO: Notificación Asíncrona ===
+	// Notificación Asíncrona
 	SendNotification(material.CreadorID, material.ID, material.Nombre, "aprobado", "")
 
 	// Log de la aprobación
@@ -137,15 +137,6 @@ func RejectMaterial(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Material no encontrado"})
 		return
 	}
-
-	// Verificar si ya está rechazado
-	/*if !material.Estado {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":    "El material ya está rechazado/pendiente",
-			"material": material,
-		})
-		return
-	}*/
 
 	// Rechazar/desaprobar el material
 	material.Estado = false

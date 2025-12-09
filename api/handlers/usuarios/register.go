@@ -68,8 +68,7 @@ func RegisterUserFromGoogle(c *gin.Context) {
 		return
 	}
 
-	// 4. Conectar a DB (Usando Singleton para evitar caídas)
-	// IMPORTANTE: Usar GetDB() en lugar de OpenGormDB()
+	// 4. Conectar a DB
 	db, err := database.GetDB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error de conexión BD"})
@@ -81,7 +80,6 @@ func RegisterUserFromGoogle(c *gin.Context) {
 
 	// Buscamos si ya existe por GoogleID
 	if err := db.Where("google_id = ?", req.GoogleID).First(&usuario).Error; err == nil {
-		// === USUARIO EXISTENTE: ACTUALIZAR DATOS ===
 		updated := false
 
 		// Actualizamos campos básicos
@@ -122,7 +120,7 @@ func RegisterUserFromGoogle(c *gin.Context) {
 
 	// === USUARIO NUEVO: CREAR ===
 	usuario = models.Usuario{
-		SupabaseID: supabaseUID, // <--- GUARDAMOS EL PUENTE DESDE EL INICIO
+		SupabaseID: supabaseUID,
 		GoogleID:   req.GoogleID,
 		Nombre:     req.Nombre,
 		Email:      req.Email,

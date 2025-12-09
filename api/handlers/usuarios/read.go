@@ -206,14 +206,13 @@ func GetPublicUserProfile(c *gin.Context) {
 			"google_id": usuario.GoogleID,
 			"nombre":    usuario.Nombre,
 			"rol":       usuario.Rol,
-			// NO incluimos: Email, SupabaseID, timestamps, ID interno
 		},
 		"estadisticas": gin.H{
 			"materiales_creados": len(materialesCreados),
 			"colaboraciones":     len(materialesColaboracion),
 			"total_materiales":   len(materialesCreados) + len(materialesColaboracion),
 		},
-		"materiales_creados":     materialesCreados,      // Materiales donde es el creador
-		"materiales_colaborador": materialesColaboracion, // Materiales donde es colaborador
+		"materiales_creados":     materialesCreados,
+		"materiales_colaborador": materialesColaboracion,
 	})
 }
