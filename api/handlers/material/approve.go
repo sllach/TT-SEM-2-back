@@ -15,32 +15,42 @@ import (
 // Helper para enviar las notificaciones en segundo plano
 func SendNotification(usuarioId string, matId uuid.UUID, materialName string, tipo string, mensajeExtra string) {
 	go func(uID string, mID uuid.UUID, mNombre string, t string) {
-		// abrimos una conexión independiente para no depender del contexto del request HTTP
 		asyncDB, err := database.OpenGormDB()
 		if err != nil {
 			log.Printf("⚠️ Error conectando DB para notificación: %v", err)
 			return
 		}
-		var titulo, mensaje string
+
+		// 1. Generamos el ID de la notificación AQUÍ en Go
+		// Esto es necesario para poder incluir el ID dentro del propio Link
+		notifID := uuid.New()
+
+		var titulo, mensaje, link string
+
 		if t == "aprobado" {
 			titulo = "¡Material Aprobado!"
 			mensaje = "Tu material '" + mNombre + "' ha sido aprobado y ya es público."
+			// Si se aprueba, el link lleva a la ficha técnica pública
+			link = "/material/" + mID.String()
 		} else {
 			titulo = "Material Rechazado"
 			mensaje = "Tu material '" + mNombre + "' ha sido rechazado."
-			// Si hay una razón específica, la agregamos
 			if mensajeExtra != "" {
 				mensaje += " Motivo: " + mensajeExtra
 			}
+			// Si se rechaza, el link lleva a la página de notificaciones (donde verán el motivo)
+			// Usamos el ID como "ancla" (#) por si quieres resaltar la tarjeta en el front
+			link = "/notification/#" + notifID.String()
 		}
 
 		nuevaNotif := models.Notificacion{
+			ID:         notifID, // Asignamos el ID generado manualmente
 			UsuarioID:  uID,
 			MaterialID: &mID,
 			Titulo:     titulo,
 			Mensaje:    mensaje,
 			Tipo:       t,
-			Link:       "/material/" + mID.String(),
+			Link:       link, // Aquí va el link dinámico
 			Leido:      false,
 		}
 

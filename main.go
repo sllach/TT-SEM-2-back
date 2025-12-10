@@ -96,6 +96,10 @@ func main() {
 
 			// Actualizar material
 			adminCollab.PUT("/materials/:id", material.UpdateMaterial)
+
+			//Leer todas las notificaciones
+			adminCollab.GET("/notifications", auth.GetNotifications)
+			adminCollab.PATCH("/notifications/:id/read", auth.MarkNotificationRead)
 		}
 
 		// ========== RUTAS SOLO PARA ADMINISTRADOR ==========
