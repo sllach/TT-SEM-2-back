@@ -20,8 +20,7 @@ var (
 	dbErr      error
 )
 
-// GetDB devuelve la instancia ÚNICA de la base de datos (Singleton).
-// Soluciona el error de "undefined" y el problema de conexiones múltiples.
+// GetDB devuelve la instancia ÚNICA de la base de datos
 func GetDB() (*gorm.DB, error) {
 	dbOnce.Do(func() {
 		dsn := config.DBURL()
@@ -31,7 +30,7 @@ func GetDB() (*gorm.DB, error) {
 			return
 		}
 
-		// Configuración de GORM (Mantenemos la config original)
+		// Configuración de GORM
 		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 			Logger: logger.Default.LogMode(logger.Error),
 			NowFunc: func() time.Time {
@@ -61,7 +60,7 @@ func GetDB() (*gorm.DB, error) {
 			return
 		}
 
-		log.Println("✅ Conexión a base de datos establecida (Singleton Pattern)")
+		log.Println("✅ Conexión a base de datos establecida")
 		dbInstance = db
 	})
 

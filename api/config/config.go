@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	// Cargar .env solo si no estamos en producción (Render)
+	// Cargar .env solo si no estamos en producción
 	if os.Getenv("RENDER") == "" {
 		err := godotenv.Load(".env")
 		if err != nil {
@@ -49,8 +49,6 @@ func DBURL() string {
 		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		DBUser, DBPassword, DBHost, DBPort, DBName, sslMode,
 	)
-
-	log.Printf("🔗 Session Pooler: host=%s port=%s ssl=%s", DBHost, DBPort, sslMode)
 	return connectionString
 }
 
