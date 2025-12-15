@@ -74,6 +74,7 @@ type SummaryMaterial struct {
 	Nombre               string             `json:"nombre"`
 	Descripcion          string             `json:"descripcion"`
 	Composicion          models.StringArray `json:"composicion"`
+	Herramientas         models.StringArray `json:"herramientas"`
 	DerivadoDe           uuid.UUID          `json:"derivado_de"`
 	Estado               bool               `json:"estado"`
 	PrimeraImagenGaleria string             `json:"primera_imagen_galeria,omitempty"`
@@ -107,6 +108,7 @@ func GetMaterialsSummary(c *gin.Context) {
 			Nombre:               m.Nombre,
 			Descripcion:          m.Descripcion,
 			Composicion:          m.Composicion,
+			Herramientas:         m.Herramientas,
 			DerivadoDe:           m.DerivadoDe,
 			Estado:               m.Estado,
 			PrimeraImagenGaleria: primeraImagen,
@@ -198,6 +200,7 @@ func GetMaterialsSummaryAdmin(c *gin.Context) {
 			Nombre:               m.Nombre,
 			Descripcion:          m.Descripcion,
 			Composicion:          m.Composicion,
+			Herramientas:         m.Herramientas,
 			DerivadoDe:           m.DerivadoDe,
 			Estado:               m.Estado,
 			PrimeraImagenGaleria: primeraImagen,
@@ -234,7 +237,7 @@ func GetMaterialsPendientes(c *gin.Context) {
 	})
 }
 
-// GetDerivedMaterials obtiene los materiales que se derivan de un ID específico (PUNTO 3)
+// GetDerivedMaterials obtiene los materiales que se derivan de un ID específico
 func GetDerivedMaterials(c *gin.Context) {
 	db, err := database.OpenGormDB()
 	if err != nil {

@@ -1,32 +1,27 @@
 package main
 
 import (
-	"TT-SEM-2-BACK/api/config"
 	"TT-SEM-2-BACK/api/database"
 	"TT-SEM-2-BACK/api/handlers/material"
 	auth "TT-SEM-2-BACK/api/handlers/usuarios"
 	"TT-SEM-2-BACK/api/middleware"
-
-	//"TT-SEM-2-BACK/api/models"
-	"fmt"
 	"log"
 	"os"
 	"time"
-
-	"gorm.io/gorm"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	var db *gorm.DB
+
 	var err error
 
 	// Intentar conectar hasta 5 veces
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
-		db, err = database.OpenGormDB()
+
+		_, err = database.OpenGormDB()
 		if err == nil {
 			break
 		}
@@ -38,32 +33,24 @@ func main() {
 	}
 
 	if err != nil {
-		log.Fatalf("Error al conectarse a la Base de Datos después de %d intentos: %v", maxRetries, err)
+		log.Fatalf("❌ Error crítico: No se pudo conectar a la Base de Datos después de %d intentos: %v", maxRetries, err)
 	}
 
-	log.Println("✅ Base de datos conectada")
+	log.Println("✅ Base de datos conectada correctamente")
 
-	db.AutoMigrate(
-	/*&models.Usuario{},
-	&models.Material{},
-	&models.PropiedadesEmocionales{},
-	&models.PropiedadesMecanicas{},
-	&models.PropiedadesPerceptivas{},
-	&models.PasoMaterial{},
-	&models.GaleriaMaterial{},
-	&models.Notificacion{},*/
-	)
-
-	fmt.Print(config.DBURL())
-
-	// Configurar CORS
+	// Configuraracion CORS
 	corsConfig := cors.Config{
-		AllowAllOrigins:  true,
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowOrigins:     []string{"https://tt-sem-2-front.vercel.app"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
+	}
+
+	// Modo Release
+	if os.Getenv("PORT") != "" {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.Default()
@@ -72,58 +59,51 @@ func main() {
 	// ========== RUTAS PÚBLICAS ==========
 	router.POST("/auth/register", auth.RegisterUserFromGoogle)
 
-	// Leer
-	router.GET("/materials", material.GetMaterials)                    // Obtener todos los materiales aprobados
-	router.GET("/materials/:id", material.GetMaterial)                 // Obtener material por ID
-	router.GET("/materials/:id/derived", material.GetDerivedMaterials) // Obtener materiales derivados
-	router.GET("/materials/filters", material.GetMaterialFilters)      // Obtener filtros dinámicos (herramientas/composición)
-	router.GET("/materials-summary", material.GetMaterialsSummary)     // Obtener los materiales resumidos
-	router.GET("/users/:google_id/public", auth.GetPublicUserProfile)  // Perfil público de usuario
+	// Leer Materiales
+	router.GET("/materials", material.GetMaterials)
+	router.GET("/materials/:id", material.GetMaterial)
+	router.GET("/materials/:id/derived", material.GetDerivedMaterials)
+	router.GET("/materials/filters", material.GetMaterialFilters)
+	router.GET("/materials-summary", material.GetMaterialsSummary)
+	router.GET("/users/:google_id/public", auth.GetPublicUserProfile)
 
 	// ========== RUTAS PROTEGIDAS ==========
 	protected := router.Group("/")
 	protected.Use(middleware.AuthMiddleware())
 	{
+		// Rutas generales
+		protected.GET("/me", auth.GetMe)
+		protected.POST("/users/request-role", auth.RequestCollaboratorRole)
 
-		protected.GET("/me", auth.GetMe)                                    // Listar Perfil del usuario juntos con sus materiales
-		protected.POST("/users/request-role", auth.RequestCollaboratorRole) //Solicitar cambio de rol
-
-		// ========== RUTAS SOLO PARA ADMINISTRADOR Y COLABORADOR ==========
+		// ========== RUTAS ADMINISTRADOR Y COLABORADOR ==========
 		adminCollab := protected.Group("/")
 		adminCollab.Use(middleware.RequireRole("administrador", "colaborador"))
 		{
-			// Crear material
 			adminCollab.POST("/materials", material.CreateMaterial)
-
-			// Actualizar material
 			adminCollab.PUT("/materials/:id", material.UpdateMaterial)
 
-			//Leer todas las notificaciones
+			// Notificaciones
 			adminCollab.GET("/notifications", auth.GetNotifications)
 			adminCollab.PATCH("/notifications/:id/read", auth.MarkNotificationRead)
-
 		}
 
-		// ========== RUTAS SOLO PARA ADMINISTRADOR ==========
+		// ========== RUTAS SOLO ADMINISTRADOR ==========
 		adminOnly := protected.Group("/")
 		adminOnly.Use(middleware.RequireRole("administrador"))
 		{
-			// Leer
-			adminOnly.GET("/users", auth.GetUsuarios)                            // Listar todos los usuarios
-			adminOnly.GET("/users/:google_id", auth.GetUsuario)                  // Obtener un usuario específico
-			adminOnly.GET("/materials/pending", material.GetMaterialsPendientes) // Listar materiales pendientes de aprobación
-			adminOnly.GET("/users/stats", auth.GetDashboardStats)                // Listar la cantidad de usuarios y materiales
+			// Usuarios
+			adminOnly.GET("/users", auth.GetUsuarios)
+			adminOnly.GET("/users/:google_id", auth.GetUsuario)
+			adminOnly.PUT("/users/:google_id", auth.UpdateUsuario)
+			adminOnly.DELETE("/users/:google_id", auth.DeleteUsuario)
+			adminOnly.DELETE("/users/:google_id/hard", auth.HardDeleteUsuario)
+			adminOnly.GET("/users/stats", auth.GetDashboardStats)
 
-			// Actualizar
-			adminOnly.PUT("/users/:google_id", auth.UpdateUsuario)             // Actualizar Usuario
-			adminOnly.POST("/materials/:id/approve", material.ApproveMaterial) // Aprobar material
-			adminOnly.POST("/materials/:id/reject", material.RejectMaterial)   // Rechazar material
-
-			// Eliminar
-			adminOnly.DELETE("/materials/:id", material.DeleteMaterial)        // Eliminar material
-			adminOnly.DELETE("/users/:google_id", auth.DeleteUsuario)          // Eliminar usuario (soft delete)
-			adminOnly.DELETE("/users/:google_id/hard", auth.HardDeleteUsuario) // Eliminar usuario (hard delete)
-
+			// Materiales Pendientes y Moderación
+			adminOnly.GET("/materials/pending", material.GetMaterialsPendientes)
+			adminOnly.POST("/materials/:id/approve", material.ApproveMaterial)
+			adminOnly.POST("/materials/:id/reject", material.RejectMaterial)
+			adminOnly.DELETE("/materials/:id", material.DeleteMaterial)
 		}
 	}
 
@@ -132,6 +112,6 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("🌐 Escuchando en el puerto %s", port)
+	log.Printf("🚀 Servidor v1.0 iniciado en el puerto %s", port)
 	router.Run(":" + port)
 }
