@@ -85,7 +85,8 @@ func main() {
 	protected.Use(middleware.AuthMiddleware())
 	{
 
-		protected.GET("/me", auth.GetMe) // Listar Perfil del usuario juntos con sus materiales
+		protected.GET("/me", auth.GetMe)                                    // Listar Perfil del usuario juntos con sus materiales
+		protected.POST("/users/request-role", auth.RequestCollaboratorRole) //Solicitar cambio de rol
 
 		// ========== RUTAS SOLO PARA ADMINISTRADOR Y COLABORADOR ==========
 		adminCollab := protected.Group("/")
@@ -100,6 +101,7 @@ func main() {
 			//Leer todas las notificaciones
 			adminCollab.GET("/notifications", auth.GetNotifications)
 			adminCollab.PATCH("/notifications/:id/read", auth.MarkNotificationRead)
+
 		}
 
 		// ========== RUTAS SOLO PARA ADMINISTRADOR ==========

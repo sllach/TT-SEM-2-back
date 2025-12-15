@@ -292,10 +292,19 @@ func CreateMaterial(c *gin.Context) {
 // notificarAdmins busca a todos los usuarios con rol 'administrador' y les crea una notificación
 func notificarAdmins(matID uuid.UUID, matNombre string, creadorID string) {
 	go func() {
-		// 1. Conectar a BD (Usando Singleton)
 		db, err := database.GetDB()
 		if err != nil {
 			return
+		}
+
+		// 1. Obtener detalles del Creador (Nombre y Email)
+		var creador models.Usuario
+		// Buscamos por GoogleID (que es lo que guardas en CreadorID)
+		if err := db.Where("google_id = ?", creadorID).First(&creador).Error; err != nil {
+			log.Printf("⚠️ No se pudo obtener info del creador para la notificación: %v", err)
+			// Fallback: Usamos solo el ID si falla la búsqueda
+			creador.Nombre = "Usuario Desconocido"
+			creador.Email = creadorID
 		}
 
 		// 2. Buscar todos los administradores
@@ -305,19 +314,21 @@ func notificarAdmins(matID uuid.UUID, matNombre string, creadorID string) {
 			return
 		}
 
-		// 3. Crear notificación para cada uno
+		// 3. Crear notificación personalizada
+		mensaje := fmt.Sprintf("El usuario %s (%s) ha subido '%s'. Requiere revisión.", creador.Nombre, creador.Email, matNombre)
+
 		for _, admin := range admins {
 			notif := models.Notificacion{
 				UsuarioID:  admin.GoogleID,
 				MaterialID: &matID,
 				Titulo:     "Nuevo Material Pendiente",
-				Mensaje:    "El usuario " + creadorID + " ha subido '" + matNombre + "'. Requiere revisión.",
-				Tipo:       "info",   // Icono azul/info
-				Link:       "/admin", // Link al material para revisarlo
+				Mensaje:    mensaje,
+				Tipo:       "info",
+				Link:       "/admin",
 				Leido:      false,
 			}
 			db.Create(&notif)
 		}
-		log.Printf("🔔 Notificación enviada a %d administradores.", len(admins))
+		log.Printf("🔔 Notificación de nuevo material enviada a %d administradores.", len(admins))
 	}()
 }
