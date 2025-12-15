@@ -379,6 +379,15 @@ func notificarUpdate(matID uuid.UUID, matNombre string, creadorID string) {
 			return
 		}
 
+		var creador models.Usuario
+		// Buscamos por GoogleID (que es lo que guardas en CreadorID)
+		if err := db.Where("google_id = ?", creadorID).First(&creador).Error; err != nil {
+			log.Printf("⚠️ No se pudo obtener info del creador para la notificación: %v", err)
+			// Fallback: Usamos solo el ID si falla la búsqueda
+			creador.Nombre = "Usuario Desconocido"
+			creador.Email = creadorID
+		}
+
 		// 2. Buscar todos los administradores
 		var admins []models.Usuario
 		// NOTA: Asegúrate que en la BD el rol sea 'administrador'
@@ -387,13 +396,16 @@ func notificarUpdate(matID uuid.UUID, matNombre string, creadorID string) {
 			return
 		}
 
-		// 3. Crear notificación para cada uno
+		// 3. Crear notificación personalizada
+		mensaje := fmt.Sprintf("El usuario %s (%s) ha actualizado:  '%s'. Requiere revisión.", creador.Nombre, creador.Email, matNombre)
+
+		// 4. Crear notificación para cada uno
 		for _, admin := range admins {
 			notif := models.Notificacion{
 				UsuarioID:  admin.GoogleID,
 				MaterialID: &matID,
 				Titulo:     "Material Actualizado Pendiente",
-				Mensaje:    "El usuario " + creadorID + " ha actualizado '" + matNombre + "'. Requiere revisión.",
+				Mensaje:    mensaje,
 				Tipo:       "info",
 				Link:       "/admin",
 				Leido:      false,
