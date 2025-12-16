@@ -82,9 +82,6 @@ type Material struct {
 	DerivadoDe uuid.UUID `gorm:"type:uuid;default:null" json:"derivado_de"`
 	Estado     bool      `gorm:"default:false" json:"estado"`
 
-	// CORRECCIÓN CLAVE AQUÍ ABAJO:
-	// joinReferences:UsuarioID -> Apunta a la columna en la tabla intermedia (que ahora es texto)
-	// references:GoogleID      -> Apunta a la columna en la tabla Usuario (que ahora es PK y texto)
 	Colaboradores []Usuario `gorm:"many2many:material_colaboradores;joinForeignKey:MaterialID;joinReferences:UsuarioID;references:GoogleID" json:"colaboradores"`
 
 	Pasos   []PasoMaterial    `gorm:"foreignKey:MaterialID;constraint:OnDelete:CASCADE" json:"pasos"`
@@ -94,3 +91,4 @@ type Material struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
+
