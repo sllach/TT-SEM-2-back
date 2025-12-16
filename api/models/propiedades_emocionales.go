@@ -1,21 +1,26 @@
 package models
 
 import (
-	"time"
-
-	"github.com/google/uuid"
-	"gorm.io/gorm"
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
 )
 
-type PropiedadesEmocionales struct {
-	MaterialID              uuid.UUID `gorm:"type:uuid;primaryKey" json:"material_id"`
-	CalidezEmocional        string    `gorm:"type:text" json:"calidez_emocional"`
-	Inspiracion             string    `gorm:"type:text" json:"inspiracion"`
-	SostenibilidadPercibida string    `gorm:"type:text" json:"sostenibilidad_percibida"`
-	Armonia                 string    `gorm:"type:text" json:"armonia"`
-	InnovacionEmocional     string    `gorm:"type:text" json:"innovacion_emocional"`
+type PropiedadEmocional struct {
+	Nombre string `json:"nombre"`
+	Valor  string `json:"valor"`
+}
 
-	CreatedAt time.Time      `json:"-"`
-	UpdatedAt time.Time      `json:"-"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+type JSONEmocionales []PropiedadEmocional
+
+func (j JSONEmocionales) Value() (driver.Value, error) {
+	return json.Marshal(j)
+}
+
+func (j *JSONEmocionales) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("error de tipo: se esperaba []byte")
+	}
+	return json.Unmarshal(bytes, &j)
 }

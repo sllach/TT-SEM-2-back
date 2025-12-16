@@ -21,8 +21,7 @@ func SendNotification(usuarioId string, matId uuid.UUID, materialName string, ti
 			return
 		}
 
-		// 1. Generamos el ID de la notificación AQUÍ en Go
-		// Esto es necesario para poder incluir el ID dentro del propio Link
+		// 1. Generamos el ID de la notificación
 		notifID := uuid.New()
 
 		var titulo, mensaje, link string
@@ -38,8 +37,7 @@ func SendNotification(usuarioId string, matId uuid.UUID, materialName string, ti
 			if mensajeExtra != "" {
 				mensaje += " Motivo: " + mensajeExtra
 			}
-			// Si se rechaza, el link lleva a la página de notificaciones (donde verán el motivo)
-			// Usamos el ID como "ancla" (#) por si quieres resaltar la tarjeta en el front
+			// Si se rechaza, el link lleva a la página de notificaciones
 			link = "/notification/#" + notifID.String()
 		}
 
@@ -129,7 +127,7 @@ func RejectMaterial(c *gin.Context) {
 
 	// 1. Leer el cuerpo (Body) para ver si hay razón de rechazo
 	var req RechazoRequest
-	// Usamos ShouldBindJSON para que no falle si no envían nada (opcional)
+	// Usamos ShouldBindJSON para que no falle si no envían nada
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// Si el JSON está mal formado o no existe, simplemente seguimos sin razón
 		log.Println("No se envió razón de rechazo o JSON inválido")
@@ -198,7 +196,7 @@ func ToggleApprovalMaterial(c *gin.Context) {
 		return
 	}
 
-	// === NUEVO: Notificación Asíncrona ===
+	// === Notificación Asíncrona ===
 	tipoNotificacion := "rechazado"
 	if nuevoEstado {
 		tipoNotificacion = "aprobado"

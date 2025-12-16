@@ -1,22 +1,26 @@
 package models
 
 import (
-	"time"
-
-	"github.com/google/uuid"
-
-	"gorm.io/gorm"
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
 )
 
-type PropiedadesPerceptivas struct {
-	MaterialID       uuid.UUID `gorm:"type:uuid;primaryKey" json:"material_id"`
-	Color            string    `gorm:"type:text" json:"color"`
-	Brillo           string    `gorm:"type:text" json:"brillo"`
-	Textura          string    `gorm:"type:text" json:"textura"`
-	Transparencia    string    `gorm:"type:text" json:"transparencia"`
-	SensacionTermica string    `gorm:"type:text" json:"sensacion_termica"`
+type PropiedadPerceptiva struct {
+	Nombre string `json:"nombre"`
+	Valor  string `json:"valor"`
+}
 
-	CreatedAt time.Time      `json:"-"`
-	UpdatedAt time.Time      `json:"-"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+type JSONPerceptivas []PropiedadPerceptiva
+
+func (j JSONPerceptivas) Value() (driver.Value, error) {
+	return json.Marshal(j)
+}
+
+func (j *JSONPerceptivas) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("error de tipo: se esperaba []byte")
+	}
+	return json.Unmarshal(bytes, &j)
 }
