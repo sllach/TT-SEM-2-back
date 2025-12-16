@@ -71,8 +71,6 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Agregar al contexto: ID local, rol
-		c.Set("usuario_id", usuario.ID)
 		c.Set("rol", usuario.Rol)
 		c.Set("google_id", usuario.GoogleID)
 

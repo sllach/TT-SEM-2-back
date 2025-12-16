@@ -16,7 +16,7 @@ import (
 
 // CreateMaterial maneja la creación de un material
 func CreateMaterial(c *gin.Context) {
-	// Obtener GoogleID del usuario para usar como CreadorID
+	// 1. Obtener GoogleID del usuario autenticado
 	googleIDAny, exists := c.Get("google_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Datos de usuario incompletos"})
@@ -30,172 +30,132 @@ func CreateMaterial(c *gin.Context) {
 		return
 	}
 
-	// Parsear form-data (max 32MB para uploads)
+	// 2. Parsear form-data (max 32MB para uploads)
 	if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Error parseando form-data: " + err.Error()})
 		return
 	}
 
-	// Extraer campos textuales
+	// 3. Extraer y Validar campos básicos
 	nombre := c.PostForm("nombre")
-	descripcion := c.PostForm("descripcion")
-	herramientasStr := c.PostForm("herramientas")
-	composicionStr := c.PostForm("composicion")
-	derivadoDeStr := c.PostForm("derivado_de")
-	propMecanicasStr := c.PostForm("prop_mecanicas")
-	propPerceptivasStr := c.PostForm("prop_perceptivas")
-	propEmocionalesStr := c.PostForm("prop_emocionales")
-
-	colaboradoresStr := c.PostForm("colaboradores")
-	// Compatibilidad con nombre alternativo
-	if colaboradoresStr == "" {
-		colaboradoresStr = c.PostForm("colaboradores_material")
-	}
-
-	pasosStr := c.PostForm("pasos")
-	galeriaCaptionsStr := c.PostForm("galeria_captions")
-
-	// Validaciones básicas
 	if nombre == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "El campo 'nombre' es requerido"})
 		return
 	}
+	descripcion := c.PostForm("descripcion")
 
-	// Parsear arrays desde strings JSON
+	// 4. Parsear JSONs Complejos
+
+	// Herramientas (Array de Strings)
 	var herramientas models.StringArray
-	if herramientasStr != "" {
-		if err := json.Unmarshal([]byte(herramientasStr), &herramientas); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "herramientas inválido (debe ser JSON array)"})
+	if str := c.PostForm("herramientas"); str != "" {
+		if err := json.Unmarshal([]byte(str), &herramientas); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de herramientas inválido"})
 			return
 		}
 	}
 
-	var composicion models.StringArray
-	if composicionStr != "" {
-		if err := json.Unmarshal([]byte(composicionStr), &composicion); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "composicion inválido (debe ser JSON array)"})
+	// Composición (Array de Objetos: Elemento + Cantidad)
+	var composicion models.JSONComponentes
+	if str := c.PostForm("composicion"); str != "" {
+		if err := json.Unmarshal([]byte(str), &composicion); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de composición inválido"})
 			return
 		}
 	}
 
+	// Propiedades Mecánicas (Nombre + Valor + Unidad)
+	var propMecanicas models.JSONMecanicas
+	if str := c.PostForm("prop_mecanicas"); str != "" {
+		if err := json.Unmarshal([]byte(str), &propMecanicas); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de prop. mecánicas inválido"})
+			return
+		}
+	}
+
+	// Propiedades Perceptivas (Nombre + Valor)
+	var propPerceptivas models.JSONGenerales
+	if str := c.PostForm("prop_perceptivas"); str != "" {
+		if err := json.Unmarshal([]byte(str), &propPerceptivas); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de prop. perceptivas inválido"})
+			return
+		}
+	}
+
+	// Propiedades Emocionales (Nombre + Valor)
+	var propEmocionales models.JSONGenerales
+	if str := c.PostForm("prop_emocionales"); str != "" {
+		if err := json.Unmarshal([]byte(str), &propEmocionales); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Formato de prop. emocionales inválido"})
+			return
+		}
+	}
+
+	// Derivado De (UUID opcional)
 	var derivadoDe uuid.UUID
-	if derivadoDeStr != "" {
-		derivadoDe, err = uuid.Parse(derivadoDeStr)
+	if str := c.PostForm("derivado_de"); str != "" {
+		parsedUUID, err := uuid.Parse(str)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "derivado_de inválido (UUID)"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "UUID de derivado_de inválido"})
 			return
 		}
+		derivadoDe = parsedUUID
 	}
 
-	// Crear el material usando el GoogleID del usuario autenticado
+	// 5. Crear el Objeto Material
 	material := models.Material{
-		ID:           uuid.New(),
-		Nombre:       nombre,
-		Descripcion:  descripcion,
-		Herramientas: herramientas,
-		Composicion:  composicion,
-		DerivadoDe:   derivadoDe,
-		CreadorID:    googleID,
-		Estado:       false,
+		ID:                     uuid.New(),
+		Nombre:                 nombre,
+		Descripcion:            descripcion,
+		Herramientas:           herramientas,
+		Composicion:            composicion,
+		PropiedadesMecanicas:   propMecanicas,
+		PropiedadesPerceptivas: propPerceptivas,
+		PropiedadesEmocionales: propEmocionales,
+		DerivadoDe:             derivadoDe,
+		CreadorID:              googleID,
+		Estado:                 false, // Pendiente de aprobación
 	}
 
+	// Guardar Material (Esto guarda automáticamente los JSONs en las columnas jsonb)
 	if err := db.Create(&material).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando material: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error guardando material en BD: " + err.Error()})
 		return
 	}
 
-	// Propiedades mecánicas
-	if propMecanicasStr != "" {
-		var propMecanicas models.PropiedadesMecanicas
-		if err := json.Unmarshal([]byte(propMecanicasStr), &propMecanicas); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "prop_mecanicas inválido (JSON object)"})
-			return
-		}
-		propMecanicas.MaterialID = material.ID
-		if err := db.Debug().Create(&propMecanicas).Error; err != nil {
-			log.Printf("Error creando prop_mecanicas: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando propiedades mecánicas: " + err.Error()})
-			return
-		}
+	// 6. Guardar Colaboradores
+	colaboradoresStr := c.PostForm("colaboradores")
+	if colaboradoresStr == "" {
+		colaboradoresStr = c.PostForm("colaboradores_material")
 	}
 
-	// Propiedades perceptivas
-	if propPerceptivasStr != "" {
-		var propPerceptivas models.PropiedadesPerceptivas
-		if err := json.Unmarshal([]byte(propPerceptivasStr), &propPerceptivas); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "prop_perceptivas inválido (JSON object)"})
-			return
-		}
-		propPerceptivas.MaterialID = material.ID
-		if err := db.Debug().Create(&propPerceptivas).Error; err != nil {
-			log.Printf("Error creando prop_perceptivas: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando propiedades perceptivas: " + err.Error()})
-			return
-		}
-	}
-
-	// Propiedades emocionales
-	if propEmocionalesStr != "" {
-		var propEmocionales models.PropiedadesEmocionales
-		if err := json.Unmarshal([]byte(propEmocionalesStr), &propEmocionales); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "prop_emocionales inválido (JSON object)"})
-			return
-		}
-		propEmocionales.MaterialID = material.ID
-		if err := db.Debug().Create(&propEmocionales).Error; err != nil {
-			log.Printf("Error creando prop_emocionales: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando propiedades emocionales: " + err.Error()})
-			return
-		}
-	}
-
-	// Colaboradores por Email
 	if colaboradoresStr != "" {
-		var colaboradoresEmails []string
-
-		// 1. Decodificar el JSON de correos
-		if err := json.Unmarshal([]byte(colaboradoresStr), &colaboradoresEmails); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "colaboradores inválido (debe ser JSON array de emails)"})
-			return
-		}
-
-		if len(colaboradoresEmails) > 0 {
-			// 2. Buscar los usuarios por Email en la BD
-			var colaboradores []models.Usuario
-			if err := db.Where("email IN ?", colaboradoresEmails).Find(&colaboradores).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error buscando colaboradores: " + err.Error()})
-				return
-			}
-
-			// 3. Verificar que se encontraron todos los colaboradores
-			if len(colaboradores) != len(colaboradoresEmails) {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"error":       "Algunos colaboradores no fueron encontrados (verifique los correos)",
-					"solicitados": len(colaboradoresEmails),
-					"encontrados": len(colaboradores),
-				})
-				return
-			}
-
-			// 4. Asociar colaboradores usando GORM (Append usa los IDs internos automáticamente)
-			if err := db.Model(&material).Association("Colaboradores").Append(&colaboradores); err != nil {
-				log.Printf("Error asociando colaboradores: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error asociando colaboradores: " + err.Error()})
-				return
+		var emails []string
+		if err := json.Unmarshal([]byte(colaboradoresStr), &emails); err == nil && len(emails) > 0 {
+			var usuarios []models.Usuario
+			// Buscar usuarios por email
+			if err := db.Where("email IN ?", emails).Find(&usuarios).Error; err == nil {
+				// Insertar relaciones manualmente
+				for _, u := range usuarios {
+					link := models.ColaboradorMaterial{
+						MaterialID: material.ID,
+						UsuarioID:  u.GoogleID,
+					}
+					// Usamos db.Create directo sobre la estructura, GORM usará la tabla definida en TableName()
+					if err := db.Create(&link).Error; err != nil {
+						log.Printf("⚠️ Error asociando colaborador %s: %v", u.Email, err)
+					}
+				}
 			}
 		}
 	}
 
-	// Parsear captions para galería (JSON array)
+	// 7. Guardar Galería
 	var galeriaCaptions []string
-	if galeriaCaptionsStr != "" {
-		if err := json.Unmarshal([]byte(galeriaCaptionsStr), &galeriaCaptions); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "galeria_captions inválido (JSON array)"})
-			return
-		}
+	if str := c.PostForm("galeria_captions"); str != "" {
+		json.Unmarshal([]byte(str), &galeriaCaptions)
 	}
 
-	// Manejar uploads de galería
 	files := c.Request.MultipartForm.File["galeria_images[]"]
 	for i, fileHeader := range files {
 		safeFilename := strings.ReplaceAll(fileHeader.Filename, " ", "_")
@@ -203,8 +163,8 @@ func CreateMaterial(c *gin.Context) {
 
 		url, err := database.SubirAStorageSupabase(fileHeader, "pasos-bucket", filePath)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error subiendo a Supabase: " + err.Error()})
-			return
+			log.Printf("Error subiendo imagen galería: %v", err)
+			continue
 		}
 
 		caption := ""
@@ -212,123 +172,82 @@ func CreateMaterial(c *gin.Context) {
 			caption = galeriaCaptions[i]
 		}
 
-		galeria := models.GaleriaMaterial{
+		db.Create(&models.GaleriaMaterial{
 			MaterialID: material.ID,
 			URLImagen:  url,
 			Caption:    caption,
-		}
-		if err := db.Debug().Create(&galeria).Error; err != nil {
-			log.Printf("Error creando galeria: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando galería: " + err.Error()})
-			return
-		}
+		})
 	}
 
-	// Manejar pasos
+	// 8. Guardar Pasos
+	pasosStr := c.PostForm("pasos")
 	if pasosStr != "" {
 		var pasos []struct {
 			OrdenPaso   int    `json:"orden_paso"`
 			Descripcion string `json:"descripcion"`
 		}
-		if err := json.Unmarshal([]byte(pasosStr), &pasos); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "pasos inválido (JSON array)"})
-			return
-		}
-
-		for i, paso := range pasos {
-			pasoModel := models.PasoMaterial{
-				MaterialID:  material.ID,
-				OrdenPaso:   paso.OrdenPaso,
-				Descripcion: paso.Descripcion,
-			}
-
-			// Upload imagen
-			fileKey := fmt.Sprintf("paso_images[%d]", i)
-			fileHeaders := c.Request.MultipartForm.File[fileKey]
-			if len(fileHeaders) > 0 {
-				fileHeader := fileHeaders[0]
-				safeFilename := strings.ReplaceAll(fileHeader.Filename, " ", "_")
-				filePath := fmt.Sprintf("materials/%s/pasos/%d/%s", material.ID.String(), i, safeFilename)
-				url, err := database.SubirAStorageSupabase(fileHeader, "pasos-bucket", filePath)
-				if err != nil {
-					log.Printf("Error subiendo imagen paso %d: %v", i, err)
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error subiendo imagen de paso: " + err.Error()})
-					return
+		if err := json.Unmarshal([]byte(pasosStr), &pasos); err == nil {
+			for i, p := range pasos {
+				pasoModel := models.PasoMaterial{
+					MaterialID:  material.ID,
+					OrdenPaso:   p.OrdenPaso,
+					Descripcion: p.Descripcion,
 				}
-				pasoModel.URLImagen = url
-			}
 
-			// Upload video
-			videoKey := fmt.Sprintf("paso_videos[%d]", i)
-			videoHeaders := c.Request.MultipartForm.File[videoKey]
-			if len(videoHeaders) > 0 {
-				fileHeader := videoHeaders[0]
-				safeFilename := strings.ReplaceAll(fileHeader.Filename, " ", "_")
-				filePath := fmt.Sprintf("materials/%s/pasos/%d/%s", material.ID.String(), i, safeFilename)
-				url, err := database.SubirAStorageSupabase(fileHeader, "pasos-bucket", filePath)
-				if err != nil {
-					log.Printf("Error subiendo video paso %d: %v", i, err)
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error subiendo video de paso: " + err.Error()})
-					return
+				// Upload Imagen Paso
+				fileKeyImg := fmt.Sprintf("paso_images[%d]", i)
+				if headers := c.Request.MultipartForm.File[fileKeyImg]; len(headers) > 0 {
+					safeName := strings.ReplaceAll(headers[0].Filename, " ", "_")
+					path := fmt.Sprintf("materials/%s/pasos/%d/%s", material.ID.String(), i, safeName)
+					if url, err := database.SubirAStorageSupabase(headers[0], "pasos-bucket", path); err == nil {
+						pasoModel.URLImagen = url
+					}
 				}
-				pasoModel.URLVideo = url
-			}
 
-			if err := db.Debug().Create(&pasoModel).Error; err != nil {
-				log.Printf("Error creando paso %d: %v", i, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creando paso: " + err.Error()})
-				return
+				// Upload Video Paso
+				fileKeyVid := fmt.Sprintf("paso_videos[%d]", i)
+				if headers := c.Request.MultipartForm.File[fileKeyVid]; len(headers) > 0 {
+					safeName := strings.ReplaceAll(headers[0].Filename, " ", "_")
+					path := fmt.Sprintf("materials/%s/pasos/%d/%s", material.ID.String(), i, safeName)
+					if url, err := database.SubirAStorageSupabase(headers[0], "pasos-bucket", path); err == nil {
+						pasoModel.URLVideo = url
+					}
+				}
+
+				db.Create(&pasoModel)
 			}
 		}
 	}
 
-	// Recargar material con relaciones
-	db.Preload("Creador").Preload("Colaboradores").Preload("Galeria").Preload("Pasos").Preload("PropiedadesMecanicas").Preload("PropiedadesPerceptivas").Preload("PropiedadesEmocionales").Find(&material)
+	// 9. Recargar y Responder
+	db.Preload("Creador").Preload("Colaboradores").Preload("Galeria").Preload("Pasos").Find(&material)
 
 	notificarAdmins(material.ID, material.Nombre, material.CreadorID)
 	c.JSON(http.StatusCreated, material)
 }
 
-// notificarAdmins busca a todos los usuarios con rol 'administrador' y les crea una notificación
+// Función auxiliar de notificaciones
 func notificarAdmins(matID uuid.UUID, matNombre string, creadorID string) {
 	go func() {
-		db, err := database.GetDB()
-		if err != nil {
-			return
-		}
-
-		// 1. Obtener detalles del Creador (Nombre y Email)
+		db, _ := database.GetDB()
 		var creador models.Usuario
-		// Buscamos por GoogleID (que es lo que guardas en CreadorID)
 		if err := db.Where("google_id = ?", creadorID).First(&creador).Error; err != nil {
-			log.Printf("⚠️ No se pudo obtener info del creador para la notificación: %v", err)
-			// Fallback: Usamos solo el ID si falla la búsqueda
-			creador.Nombre = "Usuario Desconocido"
+			creador.Nombre = "Usuario"
 			creador.Email = creadorID
 		}
-
-		// 2. Buscar todos los administradores
 		var admins []models.Usuario
-		if err := db.Where("rol = ?", "administrador").Find(&admins).Error; err != nil {
-			log.Printf("⚠️ Error buscando admins: %v", err)
-			return
-		}
+		db.Where("rol = ?", "administrador").Find(&admins)
 
-		// 3. Crear notificación personalizada
 		mensaje := fmt.Sprintf("El usuario %s (%s) ha subido '%s'. Requiere revisión.", creador.Nombre, creador.Email, matNombre)
-
 		for _, admin := range admins {
-			notif := models.Notificacion{
+			db.Create(&models.Notificacion{
 				UsuarioID:  admin.GoogleID,
 				MaterialID: &matID,
 				Titulo:     "Nuevo Material Pendiente",
 				Mensaje:    mensaje,
 				Tipo:       "info",
 				Link:       "/admin",
-				Leido:      false,
-			}
-			db.Create(&notif)
+			})
 		}
-		log.Printf("🔔 Notificación de nuevo material enviada a %d administradores.", len(admins))
 	}()
 }

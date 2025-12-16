@@ -74,9 +74,7 @@ func GetMe(c *gin.Context) {
 		Preload("Galeria").
 		Preload("Colaboradores").
 		Preload("Pasos").
-		Preload("PropiedadesMecanicas").
-		Preload("PropiedadesPerceptivas").
-		Preload("PropiedadesEmocionales").
+		// Las propiedades ahora son columnas JSONB, se cargan automáticamente
 		Find(&materialesCreados).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo materiales creados: " + err.Error()})
 		return
@@ -84,14 +82,12 @@ func GetMe(c *gin.Context) {
 
 	// Obtener materiales donde es colaborador
 	var materialesColaboracion []models.Material
-	if err := db.Joins("JOIN colaboradores_material ON colaboradores_material.material_id = materials.id").
-		Where("colaboradores_material.usuario_id = ?", googleID).
+	if err := db.Joins("JOIN material_colaboradores ON material_colaboradores.material_id = materials.id").
+		Where("material_colaboradores.usuario_id = ?", googleID).
 		Preload("Creador").
 		Preload("Galeria").
 		Preload("Colaboradores").
-		Preload("PropiedadesMecanicas").
-		Preload("PropiedadesPerceptivas").
-		Preload("PropiedadesEmocionales").
+		// Las propiedades ahora son columnas JSONB, se cargan automáticamente
 		Find(&materialesColaboracion).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo colaboraciones: " + err.Error()})
 		return
@@ -142,9 +138,7 @@ func GetUsuarioMateriales(c *gin.Context) {
 		Preload("Galeria").
 		Preload("Colaboradores").
 		Preload("Pasos").
-		Preload("PropiedadesMecanicas").
-		Preload("PropiedadesPerceptivas").
-		Preload("PropiedadesEmocionales").
+		// Las propiedades ahora son columnas JSONB, se cargan automáticamente
 		Find(&materiales).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo materiales: " + err.Error()})
 		return
@@ -183,6 +177,7 @@ func GetPublicUserProfile(c *gin.Context) {
 	if err := db.Where("creador_id = ? AND estado = ?", googleID, true).
 		Preload("Galeria").
 		Preload("Colaboradores").
+		// Propiedades se cargan solas
 		Find(&materialesCreados).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error obteniendo materiales creados: " + err.Error()})
 		return
@@ -190,8 +185,10 @@ func GetPublicUserProfile(c *gin.Context) {
 
 	// Obtener materiales APROBADOS donde es colaborador
 	var materialesColaboracion []models.Material
-	if err := db.Joins("JOIN colaboradores_material ON colaboradores_material.material_id = materials.id").
-		Where("colaboradores_material.usuario_id = ? AND materials.estado = ?", googleID, true).
+	// NOTA: Ajusté también el nombre de la tabla JOIN a 'material_colaboradores' por si acaso,
+	// asegúrate de que coincida con lo que definimos en update.go
+	if err := db.Joins("JOIN material_colaboradores ON material_colaboradores.material_id = materials.id").
+		Where("material_colaboradores.usuario_id = ? AND materials.estado = ?", googleID, true).
 		Preload("Creador").
 		Preload("Galeria").
 		Preload("Colaboradores").
