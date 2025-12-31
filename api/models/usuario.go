@@ -13,6 +13,7 @@ type Usuario struct {
 	Email      string `gorm:"size:255;not null;unique" json:"email"`
 	Rol        string `gorm:"default:'lector'" json:"rol"` // lector, colaborador, administrador
 
+	// Agregamos manualmente los campos de tiempo que quitamos al sacar gorm.Model
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
