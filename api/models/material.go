@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// --- TIPOS JSON (Dinámicos) ---
+// --- TIPOS JSON ---
 
 // 1. Composición
 type Componente struct {
@@ -91,4 +91,3 @@ type Material struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
-

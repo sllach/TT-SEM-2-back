@@ -7,7 +7,6 @@ import (
 )
 
 type Usuario struct {
-
 	GoogleID   string `gorm:"primaryKey;type:text" json:"google_id"`
 	SupabaseID string `gorm:"type:text;unique" json:"supabase_id"`
 	Nombre     string `gorm:"size:255;not null" json:"nombre"`
@@ -18,4 +17,3 @@ type Usuario struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
-
