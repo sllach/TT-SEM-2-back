@@ -7,9 +7,7 @@ import (
 )
 
 type Usuario struct {
-	// Quitamos gorm.Model para evitar que cree un ID uint automatico
-
-	GoogleID   string `gorm:"primaryKey;type:text" json:"google_id"` // <--- ESTO ES LA CLAVE AHORA
+	GoogleID   string `gorm:"primaryKey;type:text" json:"google_id"`
 	SupabaseID string `gorm:"type:text;unique" json:"supabase_id"`
 	Nombre     string `gorm:"size:255;not null" json:"nombre"`
 	Email      string `gorm:"size:255;not null;unique" json:"email"`

@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// --- TIPOS JSON (Dinámicos) ---
+// --- TIPOS JSON ---
 
 // 1. Composición
 type Componente struct {

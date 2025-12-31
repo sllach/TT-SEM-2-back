@@ -3,6 +3,7 @@ package main
 import (
 	"TT-SEM-2-BACK/api/database"
 	"TT-SEM-2-BACK/api/handlers/material"
+	"TT-SEM-2-BACK/api/handlers/health"
 	auth "TT-SEM-2-BACK/api/handlers/usuarios"
 	"TT-SEM-2-BACK/api/middleware"
 	"log"
@@ -40,7 +41,7 @@ func main() {
 
 	// Configuraracion CORS
 	corsConfig := cors.Config{
-		AllowOrigins:     []string{"https://tt-sem-2-front.vercel.app"},
+		AllowOrigins:     []string{"https://tt-sem-2-front.vercel.app","https://cron-job.org"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -58,6 +59,7 @@ func main() {
 
 	// ========== RUTAS PÚBLICAS ==========
 	router.POST("/auth/register", auth.RegisterUserFromGoogle)
+	router.GET("/health", health.HealthCheck)
 
 	// Leer Materiales
 	router.GET("/materials", material.GetMaterials)
@@ -115,3 +117,4 @@ func main() {
 	log.Printf("🚀 Servidor v1.0 iniciado en el puerto %s", port)
 	router.Run(":" + port)
 }
+
