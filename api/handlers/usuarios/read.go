@@ -202,6 +202,7 @@ func GetPublicUserProfile(c *gin.Context) {
 		"perfil": gin.H{
 			"google_id": usuario.GoogleID,
 			"nombre":    usuario.Nombre,
+			"email":     usuario.Email,
 			"rol":       usuario.Rol,
 		},
 		"estadisticas": gin.H{
